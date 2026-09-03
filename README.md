@@ -1,5 +1,19 @@
 # OdontoAura
 
+## 🛠️ Stack Tecnológica
+
+O **OdontoAura** é construído utilizando tecnologias modernas e robustas para garantir alta disponibilidade, performance, segurança e boa experiência de usuário.
+
+A documentação detalhada de cada camada da stack está disponível no diretório [`docs/stack/`](docs/stack/):
+
+- 🎨 **[Frontend](docs/stack/frontend.md)**: Next.js (React), TypeScript, Tailwind CSS, Shadcn/UI, React Hook Form, Zod, TanStack Query.
+- ⚙️ **[Backend](docs/stack/backend.md)**: Node.js, NestJS / Fastify, TypeScript, Prisma ORM, JWT, OpenAPI / Swagger.
+- 🗄️ **[Banco de Dados](docs/stack/database.md)**: PostgreSQL, Redis, Prisma Migrations.
+
+Para mais detalhes sobre as decisões e ferramentas de cada camada, acesse o **[Índice da Stack](docs/stack/README.md)**.
+
+---
+
 # Cenário
 
 Nossa aplicação web consiste em um sistema de gerenciamento, agendamento, manutenção de pacientes, horários, consultas e seleção de especialidades médicas.
