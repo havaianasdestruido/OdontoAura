@@ -1,0 +1,57 @@
+name: Auto-merge Dependabot PRs
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-merge Dependabot PR
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+
+    steps:
+      - name: Auto-merge Dependabot PR
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+
+            // Initial fetch (mergeable may be null while GitHub computes it)
+            let pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            // Poll until mergeable is true/false or timeout (~20s)
+            let tries = 0;
+            while (pr.data.mergeable === null && tries < 10) {
+              await new Promise(res => setTimeout(res, 2000));
+              pr = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+              });
+              tries++;
+            }
+
+            if (pr.data.mergeable) {
+              try {
+                const result = await github.rest.pulls.merge({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                  merge_method: 'squash',
+                });
+                console.log(`Merged PR #${prNumber}: ${result.data.merge_commit_sha || result.status}`);
+              } catch (err) {
+                console.log(`Attempt to merge PR #${prNumber} failed: ${err.message}`);
+              }
+            } else {
+              console.log(`PR #${prNumber} is not mergeable (mergeable=${pr.data.mergeable}). Skipping auto-merge.`);
+            }
