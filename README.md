@@ -1,8 +1,8 @@
-# OdontoAura
+# Medcn
 
 ## 🛠️ Stack Tecnológica
 
-O **OdontoAura** é construído utilizando tecnologias modernas e robustas para garantir alta disponibilidade, performance, segurança e boa experiência de usuário.
+O **Medcn** é construído utilizando tecnologias modernas e robustas para garantir alta disponibilidade, performance, segurança e boa experiência de usuário.
 
 A documentação detalhada de cada camada da stack está disponível no diretório [`docs/stack/`](docs/stack/):
 
