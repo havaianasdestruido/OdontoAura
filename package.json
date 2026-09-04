@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "pnpm --filter @odontoaura/shared run prisma:generate",
     "dev": "pnpm --parallel -r run dev",
     "build": "pnpm --parallel -r run build",
     "lint": "pnpm --parallel -r run lint",

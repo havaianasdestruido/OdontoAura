@@ -24,7 +24,7 @@ export interface User {
 
 @Injectable()
 export class UsersService {
-  private readonly users = new Map<string, User & { createdAt: Date }>();
+  private readonly users = new Map<string, Omit<User, 'createdAt'> & { createdAt: Date }>();
   private idCounter = 1;
 
   create(dto: CreateUserDto): User {
@@ -58,7 +58,7 @@ export class UsersService {
     this.users.delete(id);
   }
 
-  private toResult(user: User & { createdAt: Date }): User {
+  private toResult = (user: Omit<User, 'createdAt'> & { createdAt: Date }): User => {
     return { ...user, createdAt: user.createdAt.toISOString() };
-  }
+  };
 }
