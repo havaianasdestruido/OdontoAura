@@ -1,59 +1,123 @@
 # Medcn
 
-## 🛠️ Stack Tecnológica
+Sistema de gerenciamento, agendamento e manutenção de pacientes, horários, consultas e seleção de especialidades médicas.
 
 O **Medcn** é construído utilizando tecnologias modernas e robustas para garantir alta disponibilidade, performance, segurança e boa experiência de usuário.
 
-A documentação detalhada de cada camada da stack está disponível no diretório [`docs/stack/`](docs/stack/):
+## Stack Tecnológica
 
-- 🎨 **[Frontend](docs/stack/frontend.md)**: Next.js (React), TypeScript, Tailwind CSS, Shadcn/UI, React Hook Form, Zod, TanStack Query.
-- ⚙️ **[Backend](docs/stack/backend.md)**: Node.js, NestJS / Fastify, TypeScript, Prisma ORM, JWT, OpenAPI / Swagger.
-- 🗄️ **[Banco de Dados](docs/stack/database.md)**: PostgreSQL, Redis, Prisma Migrations.
+| Camada | Tecnologias |
+| :--- | :--- |
+| **Frontend** | Next.js 14, React 18, TypeScript, Tailwind CSS, Shadcn/UI, TanStack Query, Zustand, React Hook Form, Zod |
+| **Backend** | NestJS 10, Fastify, TypeScript, Prisma ORM, JWT, Swagger/OpenAPI |
+| **Banco de Dados** | PostgreSQL, Redis |
+| **Testes** | Jest, React Testing Library, Supertest |
+| **CI/CD** | GitHub Actions |
 
-Para mais detalhes sobre as decisões e ferramentas de cada camada, acesse o **[Índice da Stack](docs/stack/README.md)**.
+## Arquitetura
 
----
+Monorepo gerenciado com **pnpm workspaces**:
 
-# Cenário
+```
+odontoaura/
+├── apps/
+│   ├── backend/          # NestJS API server
+│   └── frontend/         # Next.js web application
+├── packages/
+│   └── shared/           # Prisma schema & shared types
+├── .github/              # CI/CD workflows & templates
+└── docs/                 # Documentation
+```
 
-Nossa aplicação web consiste em um sistema de gerenciamento, agendamento, manutenção de pacientes, horários, consultas e seleção de especialidades médicas.
+## Getting Started
 
-O sistema possui quatro áreas distintas, sendo elas:
+### Pré-requisitos
 
-1.  **Área do Paciente:** Espaço dedicado ao usuário para autocadastro, visualização de histórico médico, busca por especialidades/médicos e utilização de uma agenda virtual interativa para marcar, reagendar ou cancelar consultas de rotina.
-    
-2.  **Área do Funcionário (Recepção/Atendimento):** Ambiente operacional onde a equipe de recepção gerencia a fila de espera do dia, confirma presença de pacientes, realiza encaixes de última hora, atualiza cadastros e processa o faturamento ou validação de convênios/planos de saúde.
-    
-3.  **Área do Médico:** Ambiente clínico onde os profissionais visualizam sua agenda diária/semanal, acessam e preenchem prontuários eletrônicos, registram prescrições, solicitam exames e acompanham o histórico evolutivo dos pacientes atendidos.
-    
-4.  **Área do Administrador:** Painel de controle gerencial restrito para o cadastro de novos colaboradores (médicos e funcionários), configuração de horários de atendimento da clínica, gestão de convênios aceitos, definição de especialidades médicas e auditoria geral do sistema.
+- Node.js >= 20
+- pnpm >= 9
+- PostgreSQL
+- Redis
 
-## Problemas a serem resolvidos
+### Instalação
 
-A gestão tradicional de agendamentos médicos baseada em ligações telefônicas e anotações em papel é ineficiente, gera alta taxa de absenteísmo (faltas), riscos de perda de histórico físico e desorganização no fluxo de atendimento. A aplicação substitui esses métodos ultrapassados por uma plataforma digital centralizada, ágil e acessível, garantindo previsibilidade para a clínica e autonomia controlada para o paciente.
+```bash
+# Clone o repositório
+git clone https://github.com/havaianasdestruido/odontoaura.git
+cd odontoaura
 
-## Escopo
+# Instale as dependências
+pnpm install
 
-Desenvolver um sistema web completo para gerenciar a rotina administrativa e clínica de uma clínica médica de atendimento cotidiano, otimizando a interação entre pacientes, recepcionistas, médicos e administradores.
+# Configure as variáveis de ambiente
+cp .env.example .env
+# Edite .env com suas credenciais de banco de dados
 
-## Requisitos
--   **Controle e fluxo de consultas/agendamentos:** Ciclo completo de vida da consulta (agendamento pelo paciente, confirmação pela recepção, atendimento pelo médico, finalização ou cancelamento).
-    
--   **Controle de planos de saúde:** Cadastro e validação de operadoras de saúde aceitas, número de carteirinha e verificação de cobertura por procedimento/especialidade.
-    
--   **Controle de locais de atendimento:** Gestão de salas ou unidades físicas da clínica vinculadas aos médicos e horários disponíveis.
-    
--   **Controle de prontuários:** Histórico clínico digital estruturado, com registro de anamnese, diagnósticos, evoluções médicas e prescrições por atendimento.
-    
--   **Seleção de especialidades:** Filtro e busca inteligente para que o paciente encontre a área da saúde necessária (ex: Clínica Geral, Pediatria, Cardiologia).
-    
--   **Seleção de doutores:** Opção para o paciente escolher um médico específico da equipe, caso possua preferência ou acompanhamento prévio.
-    
--   **Foco no atendimento cotidiano:** Direcionamento para consultas de clínica geral e especialidades de pronto atendimento/rotina, excluindo procedimentos de alta complexidade.
+# Execute as migrações do Prisma
+cd packages/shared
+pnpm prisma migrate dev
+cd ../..
 
-## O que o sistema não precisa fazer:
--   **Consultas online (Telemedicina):** A plataforma não contará com módulo de vídeo-atendimento ou chat síncrono para consultas remotas; todos os atendimentos são presenciais.
-    
--   **Agendamentos cirúrgicos:** O escopo exclui a marcação de cirurgias, reservas de centro cirúrgico ou gestão de internações hospitalares.
-    
--   **Acompanhamentos de longo prazo/terapêuticos:** Não haverá suporte para pacotes de sessões recorrentes e de longa data (como psicoterapia contínua ou acompanhamento nutricional de longo prazo), focando estritamente em consultas pontuais de rotina.
+# Inicie o backend
+pnpm --filter @odontoaura/backend dev
+
+# Inicie o frontend (em outro terminal)
+pnpm --filter @odontoaura/frontend dev
+```
+
+### URLs de Desenvolvimento
+
+| Serviço | URL |
+| :--- | :--- |
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:3001/api |
+| Swagger Docs | http://localhost:3001/api/docs |
+
+## Endpoints da API
+
+| Método | Rota | Descrição | Acesso |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/health` | Health check | Público |
+| POST | `/api/auth/register` | Cadastro de usuário | Público |
+| POST | `/api/auth/login` | Login | Público |
+| GET | `/api/auth/me` | Perfil do usuário logado | Autenticado |
+| CRUD | `/api/users` | Gerenciamento de usuários | Admin |
+| CRUD | `/api/doctors` | Perfis de médicos | Admin/Doctor |
+| CRUD | `/api/specialties` | Especialidades médicas | Admin |
+| CRUD | `/api/appointments` | Agendamentos | Variável por role |
+| CRUD | `/api/medical-records` | Prontuários | Doctor/Admin |
+| CRUD | `/api/health-plans` | Planos de saúde | Admin/Employee |
+
+## Roles do Sistema
+
+| Role | Descrição |
+| :--- | :--- |
+| `PATIENT` | Paciente - agenda consultas, vê histórico |
+| `EMPLOYEE` | Recepção - gerencia fila, confirma presença |
+| `DOCTOR` | Médico - agenda, prontuários, prescrições |
+| `ADMIN` | Administrador - cadastros, config, auditoria |
+
+## Testes
+
+```bash
+# Todos os testes
+pnpm test
+
+# Backend com coverage
+pnpm --filter @odontoaura/backend run test -- --coverage
+
+# Frontend
+pnpm --filter @odontoaura/frontend run test
+```
+
+## CI/CD
+
+O pipeline roda automaticamente no GitHub Actions:
+
+1. **Lint** - Verificação de código
+2. **Type Check** - Validação TypeScript
+3. **Test** - Testes unitários backend e frontend
+4. **Build** - Build de produção
+
+## Licença
+
+Proprietária - OdontoAura © 2026
