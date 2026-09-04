@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+.env.*.local
+*.log
+coverage/
+.nyc_output/
+.turbo/
+.next/
+out/
+prisma/migrations/

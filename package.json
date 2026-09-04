@@ -1,0 +1,16 @@
+{
+  "name": "odontoaura",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel -r run dev",
+    "build": "pnpm --parallel -r run build",
+    "lint": "pnpm --parallel -r run lint",
+    "test": "pnpm --parallel -r run test",
+    "test:e2e": "pnpm --parallel -r run test:e2e"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
+}
