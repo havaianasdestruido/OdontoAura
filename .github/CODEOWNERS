@@ -1,0 +1,11 @@
+# Default code owners
+* @havaianasdestruido
+
+# Backend
+apps/backend/ @havaianasdestruido
+
+# Frontend
+apps/frontend/ @havaianasdestruido
+
+# CI/CD
+.github/ @havaianasdestruido
