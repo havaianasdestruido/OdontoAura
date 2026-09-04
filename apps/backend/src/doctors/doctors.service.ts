@@ -31,7 +31,7 @@ export interface AvailabilitySlot {
 
 @Injectable()
 export class DoctorsService {
-  private readonly doctors = new Map<string, DoctorProfile & { createdAt: Date }>();
+  private readonly doctors = new Map<string, Omit<DoctorProfile, 'createdAt'> & { createdAt: Date }>();
   private readonly availability = new Map<string, AvailabilitySlot[]>();
   private idCounter = 1;
   private slotCounter = 1;
