@@ -1,6 +1,15 @@
 module.exports = {
   testEnvironment: 'jsdom',
-  setupFilesAfterSetup: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: { '^@/(.*)$': '<rootDir>/src/$1' },
-  transform: { '^.+\\.(ts|tsx)$': 'ts-jest' },
+  transform: {
+    '^.+\\.(ts|tsx)$': ['ts-jest', {
+      tsconfig: {
+        jsx: 'react-jsx',
+        module: 'commonjs',
+        moduleResolution: 'node',
+        esModuleInterop: true,
+        allowImportingTsExtensions: false,
+      },
+    }],
+  },
 };
