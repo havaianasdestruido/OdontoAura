@@ -120,4 +120,4 @@ O pipeline roda automaticamente no GitHub Actions:
 
 ## Licença
 
-Proprietária - OdontoAura © 2026
+Apache 2.0
