@@ -1,4 +1,4 @@
-# Medcn
+# OdontoAura (nome pode mudar)
 
 Sistema de gerenciamento, agendamento e manutenção de pacientes, horários, consultas e seleção de especialidades médicas.
 
