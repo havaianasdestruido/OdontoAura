@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
-import { AppointmentsService, CreateAppointmentDto, AppointmentStatus } from './appointments.service';
+import { AppointmentsService, CreateAppointmentDto, UpdateAppointmentDto, AppointmentStatus } from './appointments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 
@@ -40,7 +40,7 @@ export class AppointmentsController {
 
   @Put(':id')
   @ApiOperation({ summary: 'Update appointment' })
-  update(@Param('id') id: string, @Body() dto: any) {
+  update(@Param('id') id: string, @Body() dto: UpdateAppointmentDto) {
     return this.appointmentsService.update(id, dto);
   }
 
