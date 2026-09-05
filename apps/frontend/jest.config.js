@@ -5,10 +5,11 @@ module.exports = {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
       tsconfig: {
         jsx: 'react-jsx',
-        module: 'commonjs',
-        moduleResolution: 'node',
+        module: 'node16',
+        moduleResolution: 'node16',
         esModuleInterop: true,
         allowImportingTsExtensions: false,
+        rootDir: './src',
       },
     }],
   },

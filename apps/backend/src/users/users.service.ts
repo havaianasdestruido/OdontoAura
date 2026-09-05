@@ -24,14 +24,14 @@ export interface User {
 
 @Injectable()
 export class UsersService {
-  private readonly users = new Map<string, User & { createdAt: Date }>();
+  private readonly users = new Map<string, User>();
   private idCounter = 1;
 
   create(dto: CreateUserDto): User {
     const id = `usr_${this.idCounter++}`;
-    const user = { ...dto, id, createdAt: new Date() };
+    const user = { ...dto, id, createdAt: new Date().toISOString() };
     this.users.set(id, user);
-    return { ...user, createdAt: user.createdAt.toISOString() };
+    return user;
   }
 
   findAll(role?: Role): User[] {
@@ -58,7 +58,7 @@ export class UsersService {
     this.users.delete(id);
   }
 
-  private toResult(user: User & { createdAt: Date }): User {
-    return { ...user, createdAt: user.createdAt.toISOString() };
+  private toResult(user: User): User {
+    return user;
   }
 }

@@ -1,5 +1,6 @@
 import { Body, Controller, Post, Get, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
 import { AuthService, RegisterDto, LoginDto } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
@@ -24,7 +25,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current authenticated user' })
-  getProfile(@Request() req: any) {
+  getProfile(@Request() req: { user: { id: string; email: string; name: string; role: Role } }) {
     return req.user;
   }
 }

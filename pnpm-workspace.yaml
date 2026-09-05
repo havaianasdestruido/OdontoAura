@@ -8,3 +8,5 @@ onlyBuiltDependencies:
   - "prisma"
   - "unrs-resolver"
   - "bcrypt"
+  - "@parcel/watcher"
+  - "@scarf/scarf"

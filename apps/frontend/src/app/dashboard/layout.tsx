@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth.store';
-import { LogOut, Calendar, Users, Stethoscope, Settings, ClipboardList, Shield } from 'lucide-react';
+import { LogOut, Calendar, Users, Stethoscope, Settings, ClipboardList, Shield, type LucideIcon } from 'lucide-react';
 
-const roleNavItems: Record<string, { label: string; href: string; icon: any }[]> = {
+const roleNavItems: Record<string, { label: string; href: string; icon: LucideIcon }[]> = {
   PATIENT: [
     { label: 'Minhas Consultas', href: '/dashboard/appointments', icon: Calendar },
     { label: 'Prontuário', href: '/dashboard/records', icon: ClipboardList },

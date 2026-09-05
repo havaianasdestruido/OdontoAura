@@ -31,7 +31,7 @@ export interface AvailabilitySlot {
 
 @Injectable()
 export class DoctorsService {
-  private readonly doctors = new Map<string, DoctorProfile & { createdAt: Date }>();
+  private readonly doctors = new Map<string, DoctorProfile>();
   private readonly availability = new Map<string, AvailabilitySlot[]>();
   private idCounter = 1;
   private slotCounter = 1;
@@ -45,7 +45,7 @@ export class DoctorsService {
       bio: dto.bio,
       specialties: dto.specialtyIds.map(id => ({ id, name: `Specialty ${id}` })),
       availability: [],
-      createdAt: new Date(),
+      createdAt: new Date().toISOString(),
     };
     this.doctors.set(id, doctor);
     this.availability.set(id, []);
@@ -95,7 +95,7 @@ export class DoctorsService {
     this.availability.delete(id);
   }
 
-  private toResult(doctor: any): DoctorProfile {
-    return { ...doctor, createdAt: doctor.createdAt.toISOString(), availability: this.availability.get(doctor.id) || [] };
+  private toResult(doctor: DoctorProfile): DoctorProfile {
+    return { ...doctor, availability: this.availability.get(doctor.id) || [] };
   }
 }

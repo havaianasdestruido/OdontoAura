@@ -36,13 +36,19 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
     try {
-      const { confirmPassword, ...payload } = data;
+      const payload = {
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        password: data.password,
+      };
       const response = await api.post('/auth/register', payload);
       const { user, access_token } = response.data;
       setAuth(user, access_token);
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Erro ao criar conta');
+    } catch (err) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(message || 'Erro ao criar conta');
     } finally {
       setLoading(false);
     }

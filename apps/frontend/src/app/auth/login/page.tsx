@@ -34,8 +34,9 @@ export default function LoginPage() {
       const { user, access_token } = response.data;
       setAuth(user, access_token);
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Erro ao fazer login');
+    } catch (err) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(message || 'Erro ao fazer login');
     } finally {
       setLoading(false);
     }

@@ -5,16 +5,16 @@ import { Role } from '@prisma/client';
 export class RegisterDto {
   @ApiProperty({ example: 'patient@example.com' })
   @IsEmail()
-  email: string;
+  email!: string;
 
   @ApiProperty({ example: 'securePass123' })
   @IsString()
   @MinLength(6)
-  password: string;
+  password!: string;
 
   @ApiProperty({ example: 'João Silva' })
   @IsString()
-  name: string;
+  name!: string;
 
   @ApiPropertyOptional({ example: '+5511999990000' })
   @IsOptional()
