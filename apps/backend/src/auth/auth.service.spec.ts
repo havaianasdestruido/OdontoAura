@@ -1,3 +1,4 @@
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
@@ -9,7 +10,7 @@ describe('AuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        { provide: JwtService, useValue: { sign: jest.fn().mockReturnValue('mock-token') } },
+        { provide: JwtService, useValue: { sign: vi.fn().mockReturnValue('mock-token') } },
       ],
     }).compile();
 
