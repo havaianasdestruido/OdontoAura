@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 
 export interface CreateMedicalRecordDto {
   appointmentId: string;
@@ -31,50 +32,68 @@ export interface MedicalRecord {
 
 @Injectable()
 export class MedicalRecordsService {
-  private readonly records = new Map<string, MedicalRecord>();
-  private idCounter = 1;
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: CreateMedicalRecordDto): MedicalRecord {
-    const existing = Array.from(this.records.values()).find(r => r.appointmentId === dto.appointmentId);
+  async create(dto: CreateMedicalRecordDto): Promise<MedicalRecord> {
+    const existing = await this.prisma.medicalRecord.findUnique({ where: { appointmentId: dto.appointmentId } });
     if (existing) throw new BadRequestException('Medical record already exists for this appointment');
 
-    const id = `med_${this.idCounter++}`;
-    const record: MedicalRecord = {
-      id,
-      ...dto,
-      createdAt: new Date().toISOString(),
-    };
-    this.records.set(id, record);
-    return record;
+    const record = await this.prisma.medicalRecord.create({ data: dto });
+    return this.toResult(record);
   }
 
-  findByAppointment(appointmentId: string): MedicalRecord | undefined {
-    return Array.from(this.records.values()).find(r => r.appointmentId === appointmentId);
+  async findByAppointment(appointmentId: string): Promise<MedicalRecord | undefined> {
+    const record = await this.prisma.medicalRecord.findUnique({ where: { appointmentId } });
+    return record ? this.toResult(record) : undefined;
   }
 
-  findByPatient(patientId: string): MedicalRecord[] {
-    return Array.from(this.records.values())
-      .filter(r => r.patientId === patientId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  async findByPatient(patientId: string): Promise<MedicalRecord[]> {
+    const records = await this.prisma.medicalRecord.findMany({
+      where: { patientId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return records.map(this.toResult);
   }
 
-  findOne(id: string): MedicalRecord {
-    const record = this.records.get(id);
+  async findOne(id: string): Promise<MedicalRecord> {
+    const record = await this.prisma.medicalRecord.findUnique({ where: { id } });
     if (!record) throw new NotFoundException(`Medical record ${id} not found`);
-    return record;
+    return this.toResult(record);
   }
 
-  update(id: string, dto: UpdateMedicalRecordDto): MedicalRecord {
-    const record = this.findOne(id);
-    if (dto.anamnesis !== undefined) record.anamnesis = dto.anamnesis;
-    if (dto.diagnosis !== undefined) record.diagnosis = dto.diagnosis;
-    if (dto.prescription !== undefined) record.prescription = dto.prescription;
-    if (dto.notes !== undefined) record.notes = dto.notes;
-    return record;
+  async update(id: string, dto: UpdateMedicalRecordDto): Promise<MedicalRecord> {
+    await this.findOne(id);
+    const record = await this.prisma.medicalRecord.update({ where: { id }, data: dto });
+    return this.toResult(record);
   }
 
-  remove(id: string): void {
-    if (!this.records.has(id)) throw new NotFoundException(`Medical record ${id} not found`);
-    this.records.delete(id);
+  async remove(id: string): Promise<void> {
+    const record = await this.prisma.medicalRecord.findUnique({ where: { id } });
+    if (!record) throw new NotFoundException(`Medical record ${id} not found`);
+    await this.prisma.medicalRecord.delete({ where: { id } });
+  }
+
+  private toResult(record: {
+    id: string;
+    appointmentId: string;
+    patientId: string;
+    doctorId: string;
+    anamnesis: string | null;
+    diagnosis: string | null;
+    prescription: string | null;
+    notes: string | null;
+    createdAt: Date;
+  }): MedicalRecord {
+    return {
+      id: record.id,
+      appointmentId: record.appointmentId,
+      patientId: record.patientId,
+      doctorId: record.doctorId,
+      anamnesis: record.anamnesis ?? '',
+      diagnosis: record.diagnosis ?? '',
+      prescription: record.prescription ?? undefined,
+      notes: record.notes ?? undefined,
+      createdAt: record.createdAt.toISOString(),
+    };
   }
 }

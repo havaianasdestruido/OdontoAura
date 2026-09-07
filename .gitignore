@@ -10,5 +10,5 @@ coverage/
 .turbo/
 .next/
 out/
-prisma/migrations/
 *.tsbuildinfo
+.pg/

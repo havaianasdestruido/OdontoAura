@@ -1,11 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 
 export interface CreateUserDto {
   email: string;
   name: string;
   phone?: string;
   role: Role;
+  password?: string;
 }
 
 export interface UpdateUserDto {
@@ -24,41 +27,58 @@ export interface User {
 
 @Injectable()
 export class UsersService {
-  private readonly users = new Map<string, User>();
-  private idCounter = 1;
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: CreateUserDto): User {
-    const id = `usr_${this.idCounter++}`;
-    const user = { ...dto, id, createdAt: new Date().toISOString() };
-    this.users.set(id, user);
-    return user;
+  async create(dto: CreateUserDto): Promise<User> {
+    const password = dto.password ?? (await bcrypt.hash(Math.random().toString(36).slice(2), 10));
+    return this.prisma.user
+      .create({
+        data: {
+          email: dto.email,
+          name: dto.name,
+          phone: dto.phone,
+          role: dto.role,
+          password,
+        },
+      })
+      .then(this.toResult);
   }
 
-  findAll(role?: Role): User[] {
-    const users = Array.from(this.users.values());
-    if (role) return users.filter(u => u.role === role).map(this.toResult);
+  async findAll(role?: Role): Promise<User[]> {
+    const users = await this.prisma.user.findMany({
+      where: role ? { role } : undefined,
+      orderBy: { createdAt: 'asc' },
+    });
     return users.map(this.toResult);
   }
 
-  findOne(id: string): User {
-    const user = this.users.get(id);
+  async findOne(id: string): Promise<User> {
+    const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException(`User ${id} not found`);
     return this.toResult(user);
   }
 
-  update(id: string, dto: UpdateUserDto): User {
-    const user = this.users.get(id);
-    if (!user) throw new NotFoundException(`User ${id} not found`);
-    Object.assign(user, dto);
+  async update(id: string, dto: UpdateUserDto): Promise<User> {
+    const existing = await this.prisma.user.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException(`User ${id} not found`);
+    const user = await this.prisma.user.update({ where: { id }, data: dto });
     return this.toResult(user);
   }
 
-  remove(id: string): void {
-    if (!this.users.has(id)) throw new NotFoundException(`User ${id} not found`);
-    this.users.delete(id);
+  async remove(id: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException(`User ${id} not found`);
+    await this.prisma.user.delete({ where: { id } });
   }
 
-  private toResult(user: User): User {
-    return user;
+  private toResult(user: { id: string; email: string; name: string; phone: string | null; role: Role; createdAt: Date }): User {
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      phone: user.phone ?? undefined,
+      role: user.role,
+      createdAt: user.createdAt.toISOString(),
+    };
   }
 }

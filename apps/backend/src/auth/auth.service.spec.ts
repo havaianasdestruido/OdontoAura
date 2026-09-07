@@ -1,16 +1,45 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
-import { AuthService } from './auth.service';
+import { AuthService, RegisterDto } from './auth.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { Role } from '@prisma/client';
+
+function createPrismaMock() {
+  const users: { id: string; email: string; password: string; name: string; phone: string | null; role: Role }[] = [];
+  return {
+    user: {
+      findUnique: vi.fn(async ({ where }: { where: { email?: string; id?: string } }) =>
+        users.find(u => u.email === where.email || u.id === where.id) ?? null,
+      ),
+      create: vi.fn(async ({ data }: { data: RegisterDto & { id?: string } }) => {
+        const user = {
+          id: data.id ?? `usr_${users.length + 1}`,
+          email: data.email,
+          password: data.password,
+          name: data.name,
+          phone: data.phone ?? null,
+          role: data.role || Role.PATIENT,
+        };
+        users.push(user);
+        return user;
+      }),
+    },
+    _users: users,
+  };
+}
 
 describe('AuthService', () => {
   let service: AuthService;
+  let prismaMock: ReturnType<typeof createPrismaMock>;
 
   beforeEach(async () => {
+    prismaMock = createPrismaMock();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: JwtService, useValue: { sign: vi.fn().mockReturnValue('mock-token') } },
+        { provide: PrismaService, useValue: prismaMock },
       ],
     }).compile();
 
