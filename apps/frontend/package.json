@@ -21,7 +21,7 @@
     "zod": "^4.5.4",
     "axios": "^1.7.0",
     "date-fns": "^4.4.0",
-    "lucide-react": "^0.400.0",
+    "lucide-react": "^1.41.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.4.0"
