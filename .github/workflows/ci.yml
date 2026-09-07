@@ -61,7 +61,7 @@ jobs:
       - name: Run backend tests
         run: pnpm --filter @odontoaura/backend run test -- --coverage --forceExit
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-coverage
           path: apps/backend/coverage/
@@ -83,7 +83,7 @@ jobs:
       - name: Run frontend tests
         run: pnpm --filter @odontoaura/frontend run test -- --coverage
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-coverage
           path: apps/frontend/coverage/
