@@ -1,22 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { AppointmentStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-
-export interface CreateMedicalRecordDto {
-  appointmentId: string;
-  patientId: string;
-  doctorId: string;
-  anamnesis: string;
-  diagnosis: string;
-  prescription?: string;
-  notes?: string;
-}
-
-export interface UpdateMedicalRecordDto {
-  anamnesis?: string;
-  diagnosis?: string;
-  prescription?: string;
-  notes?: string;
-}
+import { CreateMedicalRecordDto, UpdateMedicalRecordDto } from './dto/medical-record.dto';
+import { AuthUser } from '../common/auth-user';
 
 export interface MedicalRecord {
   id: string;
@@ -34,20 +20,47 @@ export interface MedicalRecord {
 export class MedicalRecordsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateMedicalRecordDto): Promise<MedicalRecord> {
+  async create(dto: CreateMedicalRecordDto, actor: AuthUser): Promise<MedicalRecord> {
+    const appointment = await this.prisma.appointment.findUnique({ where: { id: dto.appointmentId } });
+    if (!appointment) throw new NotFoundException(`Appointment ${dto.appointmentId} not found`);
+    if (appointment.status !== AppointmentStatus.IN_PROGRESS && appointment.status !== AppointmentStatus.COMPLETED) {
+      throw new BadRequestException('Medical record can only be created for in-progress or completed appointments');
+    }
+
+    const doctorProfile = await this.prisma.doctorProfile.findUnique({ where: { userId: actor.id } });
+    if (!doctorProfile) throw new ForbiddenException('Doctor has no profile');
+    if (doctorProfile.id !== appointment.doctorId) {
+      throw new ForbiddenException('Only the appointment doctor can create the medical record');
+    }
+
     const existing = await this.prisma.medicalRecord.findUnique({ where: { appointmentId: dto.appointmentId } });
     if (existing) throw new BadRequestException('Medical record already exists for this appointment');
 
-    const record = await this.prisma.medicalRecord.create({ data: dto });
+    const record = await this.prisma.medicalRecord.create({
+      data: {
+        appointmentId: dto.appointmentId,
+        patientId: appointment.patientId,
+        doctorId: doctorProfile.id,
+        anamnesis: dto.anamnesis,
+        diagnosis: dto.diagnosis,
+        prescription: dto.prescription,
+        notes: dto.notes,
+      },
+    });
     return this.toResult(record);
   }
 
-  async findByAppointment(appointmentId: string): Promise<MedicalRecord | undefined> {
+  async findByAppointment(appointmentId: string, actor: AuthUser): Promise<MedicalRecord | undefined> {
     const record = await this.prisma.medicalRecord.findUnique({ where: { appointmentId } });
-    return record ? this.toResult(record) : undefined;
+    if (!record) return undefined;
+    this.assertCanView(record, actor);
+    return this.toResult(record);
   }
 
-  async findByPatient(patientId: string): Promise<MedicalRecord[]> {
+  async findByPatient(patientId: string, actor: AuthUser): Promise<MedicalRecord[]> {
+    if (actor.role === Role.PATIENT && actor.id !== patientId) {
+      throw new ForbiddenException('You can only view your own medical records');
+    }
     const records = await this.prisma.medicalRecord.findMany({
       where: { patientId },
       orderBy: { createdAt: 'desc' },
@@ -55,22 +68,55 @@ export class MedicalRecordsService {
     return records.map(this.toResult);
   }
 
-  async findOne(id: string): Promise<MedicalRecord> {
-    const record = await this.prisma.medicalRecord.findUnique({ where: { id } });
-    if (!record) throw new NotFoundException(`Medical record ${id} not found`);
+  async findOne(id: string, actor: AuthUser): Promise<MedicalRecord> {
+    const record = await this.getRecord(id);
+    this.assertCanView(record, actor);
     return this.toResult(record);
   }
 
-  async update(id: string, dto: UpdateMedicalRecordDto): Promise<MedicalRecord> {
-    await this.findOne(id);
-    const record = await this.prisma.medicalRecord.update({ where: { id }, data: dto });
-    return this.toResult(record);
+  async update(id: string, dto: UpdateMedicalRecordDto, actor: AuthUser): Promise<MedicalRecord> {
+    const record = await this.getRecord(id);
+    await this.assertCanEdit(record.appointmentId, actor);
+    if (Object.keys(dto).length === 0) throw new BadRequestException('No fields to update');
+    const updated = await this.prisma.medicalRecord.update({
+      where: { id },
+      data: {
+        ...(dto.anamnesis !== undefined ? { anamnesis: dto.anamnesis } : {}),
+        ...(dto.diagnosis !== undefined ? { diagnosis: dto.diagnosis } : {}),
+        ...(dto.prescription !== undefined ? { prescription: dto.prescription } : {}),
+        ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+      },
+    });
+    return this.toResult(updated);
   }
 
   async remove(id: string): Promise<void> {
+    await this.getRecord(id);
+    await this.prisma.medicalRecord.delete({ where: { id } });
+  }
+
+  private async getRecord(id: string): Promise<NonNullable<Awaited<ReturnType<PrismaService['medicalRecord']['findUnique']>>>> {
     const record = await this.prisma.medicalRecord.findUnique({ where: { id } });
     if (!record) throw new NotFoundException(`Medical record ${id} not found`);
-    await this.prisma.medicalRecord.delete({ where: { id } });
+    return record;
+  }
+
+  private async assertCanEdit(appointmentId: string, actor: AuthUser): Promise<void> {
+    const doctorProfile = await this.prisma.doctorProfile.findUnique({ where: { userId: actor.id } });
+    if (!doctorProfile) throw new ForbiddenException('Doctor has no profile');
+    const appointment = await this.prisma.appointment.findUnique({ where: { id: appointmentId }, select: { doctorId: true } });
+    if (!appointment) throw new NotFoundException(`Appointment ${appointmentId} not found`);
+    if (appointment.doctorId !== doctorProfile.id) {
+      throw new ForbiddenException('Only the appointment doctor can edit this medical record');
+    }
+  }
+
+  private assertCanView(record: { patientId: string; doctorId: string }, actor: AuthUser): void {
+    if (actor.role === Role.ADMIN || actor.role === Role.EMPLOYEE) return;
+    if (actor.role === Role.PATIENT) {
+      if (record.patientId !== actor.id) throw new ForbiddenException('You can only view your own medical records');
+      return;
+    }
   }
 
   private toResult(record: {
@@ -97,3 +143,5 @@ export class MedicalRecordsService {
     };
   }
 }
+
+export { CreateMedicalRecordDto, UpdateMedicalRecordDto } from './dto/medical-record.dto';

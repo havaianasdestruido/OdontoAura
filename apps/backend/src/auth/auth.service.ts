@@ -3,19 +3,8 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-
-export interface RegisterDto {
-  email: string;
-  password: string;
-  name: string;
-  phone?: string;
-  role?: Role;
-}
-
-export interface LoginDto {
-  email: string;
-  password: string;
-}
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
 
 export interface JwtPayload {
   sub: string;
@@ -41,7 +30,7 @@ export class AuthService {
         password: passwordHash,
         name: dto.name,
         phone: dto.phone,
-        role: dto.role || Role.PATIENT,
+        role: Role.PATIENT,
       },
     });
 
@@ -70,3 +59,6 @@ export class AuthService {
     return this.jwtService.sign(payload);
   }
 }
+
+export { RegisterDto } from './dto/register.dto';
+export { LoginDto } from './dto/login.dto';

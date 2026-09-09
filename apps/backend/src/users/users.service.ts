@@ -1,20 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-
-export interface CreateUserDto {
-  email: string;
-  name: string;
-  phone?: string;
-  role: Role;
-  password?: string;
-}
-
-export interface UpdateUserDto {
-  name?: string;
-  phone?: string;
-}
+import { CreateUserDto, UpdateUserDto } from './dto/user.dto';
 
 export interface User {
   id: string;
@@ -30,6 +18,9 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateUserDto): Promise<User> {
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (existing) throw new ConflictException('Email already registered');
+
     const password = dto.password ?? (await bcrypt.hash(Math.random().toString(36).slice(2), 10));
     return this.prisma.user
       .create({
@@ -61,6 +52,7 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto): Promise<User> {
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`User ${id} not found`);
+    if (Object.keys(dto).length === 0) throw new BadRequestException('No fields to update');
     const user = await this.prisma.user.update({ where: { id }, data: dto });
     return this.toResult(user);
   }
@@ -82,3 +74,5 @@ export class UsersService {
     };
   }
 }
+
+export { CreateUserDto, UpdateUserDto } from './dto/user.dto';

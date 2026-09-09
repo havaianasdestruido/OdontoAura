@@ -1,17 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-
-export interface CreateDoctorDto {
-  userId: string;
-  licenseNumber: string;
-  bio?: string;
-  specialtyIds: string[];
-}
-
-export interface UpdateDoctorDto {
-  bio?: string;
-  specialtyIds?: string[];
-}
+import { CreateDoctorDto, UpdateDoctorDto, CreateAvailabilityDto } from './dto/doctor.dto';
+import { AuthUser } from '../common/auth-user';
 
 export interface DoctorProfile {
   id: string;
@@ -35,16 +26,35 @@ export class DoctorsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateDoctorDto): Promise<DoctorProfile> {
-    const specialty = dto.specialtyIds[0];
-    const doctor = await this.prisma.doctorProfile.create({
-      data: {
-        userId: dto.userId,
-        licenseNumber: dto.licenseNumber,
-        bio: dto.bio,
-        specialtyId: specialty,
-      },
-      include: { specialty: true },
-    });
+    const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
+    if (!user) throw new NotFoundException(`User ${dto.userId} not found`);
+    if (user.role !== Role.DOCTOR) {
+      throw new BadRequestException('User must have role DOCTOR to have a doctor profile');
+    }
+
+    const specialty = await this.prisma.specialty.findUnique({ where: { id: dto.specialtyId } });
+    if (!specialty) throw new NotFoundException(`Specialty ${dto.specialtyId} not found`);
+
+    const existingLicense = await this.prisma.doctorProfile.findUnique({ where: { licenseNumber: dto.licenseNumber } });
+    if (existingLicense) throw new ConflictException(`License ${dto.licenseNumber} is already in use`);
+
+    let doctor;
+    try {
+      doctor = await this.prisma.doctorProfile.create({
+        data: {
+          userId: dto.userId,
+          licenseNumber: dto.licenseNumber,
+          bio: dto.bio,
+          specialtyId: dto.specialtyId,
+        },
+        include: { specialty: true },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException(`Doctor profile already exists for user ${dto.userId} or license ${dto.licenseNumber}`);
+      }
+      throw e;
+    }
     return this.toResult(doctor, []);
   }
 
@@ -73,25 +83,57 @@ export class DoctorsService {
     return doctor ? this.toResult(doctor, doctor.availabilitySlots) : undefined;
   }
 
-  async update(id: string, dto: UpdateDoctorDto): Promise<DoctorProfile> {
+  async update(id: string, dto: UpdateDoctorDto, actor: AuthUser): Promise<DoctorProfile> {
     const existing = await this.prisma.doctorProfile.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Doctor ${id} not found`);
+    if (actor.role === Role.DOCTOR && existing.userId !== actor.id) {
+      throw new ForbiddenException('A doctor can only update their own profile');
+    }
+    if (dto.specialtyId) {
+      const specialty = await this.prisma.specialty.findUnique({ where: { id: dto.specialtyId } });
+      if (!specialty) throw new NotFoundException(`Specialty ${dto.specialtyId} not found`);
+    }
+
+    const data = {
+      ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
+      ...(dto.specialtyId ? { specialtyId: dto.specialtyId } : {}),
+    };
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Nothing to update');
+    }
 
     const doctor = await this.prisma.doctorProfile.update({
       where: { id },
-      data: {
-        bio: dto.bio,
-        ...(dto.specialtyIds?.length ? { specialtyId: dto.specialtyIds[0] } : {}),
-      },
+      data,
       include: { specialty: true, availabilitySlots: true },
     });
     return this.toResult(doctor, doctor.availabilitySlots);
   }
 
-  async addAvailability(doctorId: string, slot: Omit<AvailabilitySlot, 'id'>): Promise<AvailabilitySlot> {
-    await this.findOne(doctorId);
+  async addAvailability(doctorId: string, slot: CreateAvailabilityDto, actor: AuthUser): Promise<AvailabilitySlot> {
+    const doctor = await this.findOne(doctorId);
+    if (actor.role === Role.DOCTOR && doctor.userId !== actor.id) {
+      throw new ForbiddenException('A doctor can only manage their own availability');
+    }
+    if (slot.dayOfWeek < 0 || slot.dayOfWeek > 6) {
+      throw new BadRequestException('dayOfWeek must be between 0 (Sunday) and 6 (Saturday)');
+    }
+    if (slot.startTime >= slot.endTime) {
+      throw new BadRequestException('startTime must be before endTime');
+    }
+    const overlapping = await this.prisma.availabilitySlot.findFirst({
+      where: {
+        doctorId,
+        dayOfWeek: slot.dayOfWeek,
+        startTime: { lt: slot.endTime },
+        endTime: { gt: slot.startTime },
+      },
+    });
+    if (overlapping) {
+      throw new ConflictException(`Availability already exists for day ${slot.dayOfWeek} ${slot.startTime}-${slot.endTime}`);
+    }
     const created = await this.prisma.availabilitySlot.create({
-      data: { doctorId, ...slot },
+      data: { doctorId, dayOfWeek: slot.dayOfWeek, startTime: slot.startTime, endTime: slot.endTime },
     });
     return {
       id: created.id,
@@ -141,3 +183,5 @@ export class DoctorsService {
     };
   }
 }
+
+export { CreateDoctorDto, UpdateDoctorDto, CreateAvailabilityDto } from './dto/doctor.dto';

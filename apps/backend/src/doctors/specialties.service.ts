@@ -1,5 +1,7 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
+import { CreateSpecialtyDto } from './dto/specialty.dto';
 
 export interface Specialty {
   id: string;
@@ -11,10 +13,10 @@ export interface Specialty {
 export class SpecialtiesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(name: string, description?: string): Promise<Specialty> {
-    const existing = await this.prisma.specialty.findUnique({ where: { name } });
-    if (existing) throw new ConflictException(`Specialty "${name}" already exists`);
-    const spec = await this.prisma.specialty.create({ data: { name, description } });
+  async create(dto: CreateSpecialtyDto): Promise<Specialty> {
+    const existing = await this.prisma.specialty.findUnique({ where: { name: dto.name } });
+    if (existing) throw new ConflictException(`Specialty "${dto.name}" already exists`);
+    const spec = await this.prisma.specialty.create({ data: { name: dto.name, description: dto.description } });
     return this.toResult(spec);
   }
 
@@ -32,7 +34,14 @@ export class SpecialtiesService {
   async remove(id: string): Promise<void> {
     const spec = await this.prisma.specialty.findUnique({ where: { id } });
     if (!spec) throw new NotFoundException(`Specialty ${id} not found`);
-    await this.prisma.specialty.delete({ where: { id } });
+    try {
+      await this.prisma.specialty.delete({ where: { id } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+        throw new ConflictException(`Specialty ${id} is referenced by doctors or appointments`);
+      }
+      throw e;
+    }
   }
 
   private toResult(spec: { id: string; name: string; description: string | null }): Specialty {
@@ -43,3 +52,5 @@ export class SpecialtiesService {
     };
   }
 }
+
+export { CreateSpecialtyDto } from './dto/specialty.dto';

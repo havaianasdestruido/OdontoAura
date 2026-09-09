@@ -1,19 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-
-export interface CreateHealthPlanDto {
-  name: string;
-  provider: string;
-  coveragePercentage: number;
-  isActive?: boolean;
-}
-
-export interface UpdateHealthPlanDto {
-  name?: string;
-  provider?: string;
-  coveragePercentage?: number;
-  isActive?: boolean;
-}
+import { CreateHealthPlanDto, UpdateHealthPlanDto, AssignPlanDto } from './dto/health-plan.dto';
+import { AuthUser } from '../common/auth-user';
 
 export interface HealthPlan {
   id: string;
@@ -22,13 +11,6 @@ export interface HealthPlan {
   coveragePercentage: number;
   isActive: boolean;
   createdAt: string;
-}
-
-export interface AssignPlanDto {
-  patientId: string;
-  healthPlanId: string;
-  cardNumber: string;
-  expiryDate: string;
 }
 
 export interface PatientPlan {
@@ -77,6 +59,7 @@ export class HealthPlansService {
 
   async update(id: string, dto: UpdateHealthPlanDto): Promise<HealthPlan> {
     await this.findOne(id);
+    if (Object.keys(dto).length === 0) throw new BadRequestException('No fields to update');
     const plan = await this.prisma.healthPlan.update({ where: { id }, data: dto });
     return this.toPlanResult(plan);
   }
@@ -89,6 +72,9 @@ export class HealthPlansService {
 
   async assignToPatient(dto: AssignPlanDto): Promise<PatientPlan> {
     const plan = await this.findOne(dto.healthPlanId);
+    const patient = await this.prisma.user.findUnique({ where: { id: dto.patientId }, select: { id: true } });
+    if (!patient) throw new NotFoundException(`Patient ${dto.patientId} not found`);
+
     const existing = await this.prisma.patientHealthPlan.findUnique({
       where: { patientId_healthPlanId: { patientId: dto.patientId, healthPlanId: dto.healthPlanId } },
       select: { id: true },
@@ -114,11 +100,14 @@ export class HealthPlansService {
     };
   }
 
-  async getPatientPlans(patientId: string): Promise<PatientPlan[]> {
+  async getPatientPlans(patientId: string, actor: AuthUser): Promise<PatientPlan[]> {
+    if (actor.role === Role.PATIENT && actor.id !== patientId) {
+      throw new ForbiddenException('You can only view your own health plans');
+    }
     const rows = await this.prisma.patientHealthPlan.findMany({
       where: { patientId },
       include: { healthPlan: true },
-      orderBy: { id: 'asc' },
+      orderBy: { healthPlan: { name: 'asc' } },
     });
     return rows.map(r => ({
       id: r.id,
@@ -130,14 +119,18 @@ export class HealthPlansService {
     }));
   }
 
-  async verifyCoverage(patientId: string, healthPlanId: string): Promise<{ covered: boolean; coveragePercentage: number }> {
+  async verifyCoverage(patientId: string, healthPlanId: string, actor: AuthUser): Promise<{ covered: boolean; coveragePercentage: number }> {
+    if (actor.role === Role.PATIENT && actor.id !== patientId) {
+      throw new ForbiddenException('You can only verify your own coverage');
+    }
     const plan = await this.prisma.healthPlan.findUnique({ where: { id: healthPlanId } });
     if (!plan || !plan.isActive) return { covered: false, coveragePercentage: 0 };
-    const hasPlan = await this.prisma.patientHealthPlan.findUnique({
+    const assignment = await this.prisma.patientHealthPlan.findUnique({
       where: { patientId_healthPlanId: { patientId, healthPlanId } },
-      select: { id: true },
     });
-    return { covered: !!hasPlan, coveragePercentage: hasPlan ? plan.coveragePercentage : 0 };
+    if (!assignment) return { covered: false, coveragePercentage: 0 };
+    if (assignment.expiryDate < new Date()) return { covered: false, coveragePercentage: 0 };
+    return { covered: true, coveragePercentage: plan.coveragePercentage };
   }
 
   async removePatientPlan(id: string): Promise<void> {
@@ -164,3 +157,5 @@ export class HealthPlansService {
     };
   }
 }
+
+export { CreateHealthPlanDto, UpdateHealthPlanDto, AssignPlanDto } from './dto/health-plan.dto';
