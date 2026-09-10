@@ -62,12 +62,18 @@ function createPrismaMock() {
           let rows = [...appointments];
           if (where?.patientId) rows = rows.filter(a => a.patientId === where.patientId);
           if (where?.doctorId) rows = rows.filter(a => a.doctorId === where.doctorId);
-          if (where?.status) {
-            if ('in' in where.status) rows = rows.filter(a => where.status.in!.includes(a.status));
-            else if ('notIn' in where.status) rows = rows.filter(a => !where.status.notIn!.includes(a.status));
-            else rows = rows.filter(a => a.status === where.status);
+          const status = where?.status;
+          if (status) {
+            if (typeof status === 'string') {
+              rows = rows.filter(a => a.status === status);
+            } else if (status.in) {
+              rows = rows.filter(a => status.in!.includes(a.status));
+            } else if (status.notIn) {
+              rows = rows.filter(a => !status.notIn!.includes(a.status));
+            }
           }
-          if (where?.id?.not) rows = rows.filter(a => a.id !== where.id.not);
+          const excludeId = where?.id?.not;
+          if (excludeId) rows = rows.filter(a => a.id !== excludeId);
           if (orderBy?.scheduledAt === 'asc') rows.sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime());
           return rows;
         },

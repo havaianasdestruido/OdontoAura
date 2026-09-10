@@ -12,7 +12,7 @@ function createPrismaMock() {
       findUnique: vi.fn(async ({ where }: { where: { email?: string; id?: string } }) =>
         users.find(u => u.email === where.email || u.id === where.id) ?? null,
       ),
-      create: vi.fn(async ({ data }: { data: RegisterDto & { id?: string } }) => {
+      create: vi.fn(async ({ data }: { data: RegisterDto & { id?: string; role?: Role } }) => {
         const user = {
           id: data.id ?? `usr_${users.length + 1}`,
           email: data.email,
