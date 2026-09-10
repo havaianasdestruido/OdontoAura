@@ -24,7 +24,12 @@ export function createApp() {
   const allowedOrigins = Array.from(
     new Set([...(envOrigins || []), ...defaultOrigins]),
   );
-  app.enableCors({ origin: allowedOrigins });
+  app.enableCors({
+    origin: allowedOrigins,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
+    credentials: true,
+  });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   // TODO: register global ExceptionFilter so UnauthorizedException/ForbiddenException return proper status codes instead of 500
 
