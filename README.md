@@ -95,6 +95,26 @@ pnpm --filter @odontoaura/frontend dev
 | `DOCTOR` | Médico - agenda, prontuários, prescrições |
 | `ADMIN` | Administrador - cadastros, config, auditoria |
 
+## Dados de teste (ambiente local)
+
+Os usuários abaixo existem apenas no banco local (`start_all.ps1`), populados pelos scripts de smoke. **Senha de todos: `secret123`**
+
+| Email | Role | Uso |
+| :--- | :--- | :--- |
+| `persist.20260907125852@test.com` | `PATIENT` | Diagnóstico de persistência |
+| `admin.20260907130039@test.com` | `ADMIN` | Admin com acesso total |
+| `doc.20260907130130@test.com` | `DOCTOR` | Perfil de médico |
+| `pat.20260907130130@test.com` | `PATIENT` | Paciente base |
+| `adm.20260907130148@test.com` | `ADMIN` | Admin da suite de acesso |
+| `esc.20260907@test.com` | `PATIENT` | Teste de escalada de role |
+| `doc.smoke.20260909204047@test.com` | `DOCTOR` | Smoke run (09/09 20:40) |
+| `p1.smoke.20260909204047@test.com` | `PATIENT` | Smoke run - paciente 1 |
+| `p2.smoke.20260909204047@test.com` | `PATIENT` | Smoke run - paciente 2 |
+
+Demais usuários da suite (`flow.*`, `api.*`, `probe.*`, `pat.*`, `pat2.*`, `esc.20260909*`) seguem o mesmo padrão e senha.
+
+> Em um banco recém-criado (sem os dados de smoke) os usuários não existem — crie via `POST /api/auth/register` (público) ou pelo script `smoke.ps1`.
+
 ## Testes
 
 ```bash
