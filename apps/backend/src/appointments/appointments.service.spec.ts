@@ -177,6 +177,7 @@ it('should reject double booking for the same patient', async () => {
     });
   });
 
+  // TODO: add tests for findAll and findOne — currently zero coverage
   describe('status transitions', () => {
     it('should follow valid state machine', async () => {
       const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -200,6 +201,8 @@ it('should reject double booking for the same patient', async () => {
     });
   });
 
+  // TODO: add tests for remove — guard against deleting in-progress/completed appointments and appointments with linked records
+  // TODO: add tests for cancel-window enforcement — reject cancel when scheduledAt is in the past
   describe('cancel', () => {
     it('should cancel a scheduled appointment as the owner', async () => {
       const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();

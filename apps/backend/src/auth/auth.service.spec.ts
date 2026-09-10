@@ -81,10 +81,26 @@ describe('AuthService', () => {
       expect(result.user.email).toBe('login@example.com');
     });
 
+    // TODO: test login with an existing user but wrong password to cover bcrypt.compare failure branch
+    // TODO: test that register returns user object without password field in the response
     it('should reject invalid credentials', async () => {
       await expect(
         service.login({ email: 'nonexistent@example.com', password: 'wrong' }),
       ).rejects.toThrow('Invalid credentials');
+    });
+  });
+
+  describe('validateUser', () => {
+    it('should map the JWT payload to an AuthUser without querying the database', () => {
+      const result = service.validateUser({ sub: 'usr_1', email: 'a@b.com', name: 'Ana', role: Role.DOCTOR });
+      expect(result).toEqual({ id: 'usr_1', email: 'a@b.com', name: 'Ana', role: Role.DOCTOR });
+      expect(prismaMock.user.findUnique).toHaveBeenCalledTimes(0);
+    });
+
+    it('should fall back to an empty name for tokens issued without one', () => {
+      const legacy = { sub: 'usr_1', email: 'a@b.com', role: Role.PATIENT } as Parameters<typeof service.validateUser>[0];
+      const result = service.validateUser(legacy);
+      expect(result).toEqual({ id: 'usr_1', email: 'a@b.com', name: '', role: Role.PATIENT });
     });
   });
 });

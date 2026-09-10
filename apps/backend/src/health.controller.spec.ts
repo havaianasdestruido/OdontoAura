@@ -18,4 +18,5 @@ describe('HealthController', () => {
     expect(result.service).toBe('odontoaura-api');
     expect(result).toHaveProperty('timestamp');
   });
+  // TODO: add test for unhealthy state when DB connectivity check fails
 });
