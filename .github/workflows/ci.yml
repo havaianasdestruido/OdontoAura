@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
       - uses: actions/setup-node@v4
@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
       - uses: actions/setup-node@v4
@@ -50,7 +50,7 @@ jobs:
     needs: [lint]
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
       - uses: actions/setup-node@v4
@@ -67,7 +67,7 @@ jobs:
     needs: [lint]
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
       - uses: actions/setup-node@v4
@@ -84,7 +84,7 @@ jobs:
     needs: [typecheck, test-backend, test-frontend]
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
       - uses: actions/setup-node@v4
