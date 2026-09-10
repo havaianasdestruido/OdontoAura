@@ -8,10 +8,10 @@ O **OdontoAura** é construído utilizando tecnologias modernas e robustas para 
 
 | Camada | Tecnologias |
 | :--- | :--- |
-| **Frontend** | Next.js 14, React 18, TypeScript, Tailwind CSS, Shadcn/UI, TanStack Query, Zustand, React Hook Form, Zod |
-| **Backend** | NestJS 10, Fastify, TypeScript, Prisma ORM, JWT, Swagger/OpenAPI |
-| **Banco de Dados** | PostgreSQL, Redis |
-| **Testes** | Jest, React Testing Library, Supertest |
+| **Frontend** | Next.js 15, React 18, TypeScript, Tailwind CSS, Shadcn/UI, TanStack Query, Zustand, React Hook Form, Zod |
+| **Backend** | NestJS 12, Fastify, TypeScript, Prisma ORM, JWT, Swagger/OpenAPI |
+| **Banco de Dados** | PostgreSQL (nativo) |
+| **Testes** | Vitest (backend), Jest, React Testing Library |
 | **CI/CD** | GitHub Actions |
 
 ## Arquitetura
@@ -35,8 +35,7 @@ odontoaura/
 
 - Node.js >= 20
 - pnpm >= 9
-- PostgreSQL
-- Redis
+- PostgreSQL 16 (local via `start_all.ps1` no Windows ou qualquer instância PostgreSQL)
 
 ### Instalação
 
@@ -102,11 +101,18 @@ pnpm --filter @odontoaura/frontend dev
 # Todos os testes
 pnpm test
 
-# Backend com coverage
-pnpm --filter @odontoaura/backend run test -- --coverage
+# Backend (Vitest)
+pnpm --filter @odontoaura/backend run test
 
-# Frontend
+# Frontend (Jest)
 pnpm --filter @odontoaura/frontend run test
+```
+
+### Desenvolvimento local (Windows)
+
+```powershell
+# Sobe PostgreSQL nativo, backend (porta 3001) e frontend (porta 3000)
+.\start_all.ps1
 ```
 
 ## CI/CD

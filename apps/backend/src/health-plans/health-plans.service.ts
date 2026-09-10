@@ -1,18 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
-
-export interface CreateHealthPlanDto {
-  name: string;
-  provider: string;
-  coveragePercentage: number;
-  isActive?: boolean;
-}
-
-export interface UpdateHealthPlanDto {
-  name?: string;
-  provider?: string;
-  coveragePercentage?: number;
-  isActive?: boolean;
-}
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Role } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreateHealthPlanDto, UpdateHealthPlanDto, AssignPlanDto } from './dto/health-plan.dto';
+import { AuthUser } from '../common/auth-user';
 
 export interface HealthPlan {
   id: string;
@@ -21,13 +11,6 @@ export interface HealthPlan {
   coveragePercentage: number;
   isActive: boolean;
   createdAt: string;
-}
-
-export interface AssignPlanDto {
-  patientId: string;
-  healthPlanId: string;
-  cardNumber: string;
-  expiryDate: string;
 }
 
 export interface PatientPlan {
@@ -41,82 +24,138 @@ export interface PatientPlan {
 
 @Injectable()
 export class HealthPlansService {
-  private readonly plans = new Map<string, HealthPlan>();
-  private readonly patientPlans = new Map<string, PatientPlan>();
-  private planCounter = 1;
-  private patientPlanCounter = 1;
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: CreateHealthPlanDto): HealthPlan {
-    const existing = Array.from(this.plans.values()).find(p => p.name === dto.name && p.provider === dto.provider);
+  async create(dto: CreateHealthPlanDto): Promise<HealthPlan> {
+    const existing = await this.prisma.healthPlan.findFirst({
+      where: { name: dto.name, provider: dto.provider },
+      select: { id: true },
+    });
     if (existing) throw new ConflictException('Health plan with this name and provider already exists');
 
-    const id = `hp_${this.planCounter++}`;
-    const plan: HealthPlan = {
-      id,
-      name: dto.name,
-      provider: dto.provider,
-      coveragePercentage: dto.coveragePercentage,
-      isActive: dto.isActive ?? true,
-      createdAt: new Date().toISOString(),
-    };
-    this.plans.set(id, plan);
-    return plan;
+    return this.prisma.healthPlan.create({
+      data: {
+        name: dto.name,
+        provider: dto.provider,
+        coveragePercentage: dto.coveragePercentage,
+        isActive: dto.isActive ?? true,
+      },
+    }).then(this.toPlanResult);
   }
 
-  findAll(activeOnly = false): HealthPlan[] {
-    const plans = Array.from(this.plans.values());
-    if (activeOnly) return plans.filter(p => p.isActive);
-    return plans;
+  async findAll(activeOnly = false): Promise<HealthPlan[]> {
+    const plans = await this.prisma.healthPlan.findMany({
+      where: activeOnly ? { isActive: true } : undefined,
+      orderBy: { name: 'asc' },
+    });
+    return plans.map(this.toPlanResult);
   }
 
-  findOne(id: string): HealthPlan {
-    const plan = this.plans.get(id);
+  async findOne(id: string): Promise<HealthPlan> {
+    const plan = await this.prisma.healthPlan.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException(`Health plan ${id} not found`);
-    return plan;
+    return this.toPlanResult(plan);
   }
 
-  update(id: string, dto: UpdateHealthPlanDto): HealthPlan {
-    const plan = this.findOne(id);
-    if (dto.name !== undefined) plan.name = dto.name;
-    if (dto.provider !== undefined) plan.provider = dto.provider;
-    if (dto.coveragePercentage !== undefined) plan.coveragePercentage = dto.coveragePercentage;
-    if (dto.isActive !== undefined) plan.isActive = dto.isActive;
-    return plan;
+  async update(id: string, dto: UpdateHealthPlanDto): Promise<HealthPlan> {
+    await this.findOne(id);
+    if (Object.keys(dto).length === 0) throw new BadRequestException('No fields to update');
+    const plan = await this.prisma.healthPlan.update({ where: { id }, data: dto });
+    return this.toPlanResult(plan);
   }
 
-  remove(id: string): void {
-    if (!this.plans.has(id)) throw new NotFoundException(`Health plan ${id} not found`);
-    this.plans.delete(id);
+  async remove(id: string): Promise<void> {
+    const plan = await this.prisma.healthPlan.findUnique({ where: { id } });
+    if (!plan) throw new NotFoundException(`Health plan ${id} not found`);
+    await this.prisma.healthPlan.delete({ where: { id } });
   }
 
-  assignToPatient(dto: AssignPlanDto): PatientPlan {
-    const plan = this.findOne(dto.healthPlanId);
-    const existing = Array.from(this.patientPlans.values()).find(
-      pp => pp.patientId === dto.patientId && pp.healthPlanId === dto.healthPlanId
-    );
+  async assignToPatient(dto: AssignPlanDto): Promise<PatientPlan> {
+    const plan = await this.findOne(dto.healthPlanId);
+    const patient = await this.prisma.user.findUnique({ where: { id: dto.patientId }, select: { id: true } });
+    if (!patient) throw new NotFoundException(`Patient ${dto.patientId} not found`);
+
+    const existing = await this.prisma.patientHealthPlan.findUnique({
+      where: { patientId_healthPlanId: { patientId: dto.patientId, healthPlanId: dto.healthPlanId } },
+      select: { id: true },
+    });
     if (existing) throw new ConflictException('Patient already has this health plan');
 
-    const id = `pp_${this.patientPlanCounter++}`;
-    const patientPlan: PatientPlan = { id, ...dto, healthPlan: plan };
-    this.patientPlans.set(id, patientPlan);
-    return patientPlan;
+    const patientPlan = await this.prisma.patientHealthPlan.create({
+      data: {
+        patientId: dto.patientId,
+        healthPlanId: dto.healthPlanId,
+        cardNumber: dto.cardNumber,
+        expiryDate: new Date(dto.expiryDate),
+      },
+    });
+
+    return {
+      id: patientPlan.id,
+      patientId: patientPlan.patientId,
+      healthPlanId: patientPlan.healthPlanId,
+      cardNumber: patientPlan.cardNumber,
+      expiryDate: patientPlan.expiryDate.toISOString(),
+      healthPlan: { ...plan, createdAt: plan.createdAt },
+    };
   }
 
-  getPatientPlans(patientId: string): PatientPlan[] {
-    return Array.from(this.patientPlans.values()).filter(pp => pp.patientId === patientId);
+  async getPatientPlans(patientId: string, actor: AuthUser): Promise<PatientPlan[]> {
+    if (actor.role === Role.PATIENT && actor.id !== patientId) {
+      throw new ForbiddenException('You can only view your own health plans');
+    }
+    const rows = await this.prisma.patientHealthPlan.findMany({
+      where: { patientId },
+      include: { healthPlan: true },
+      orderBy: { healthPlan: { name: 'asc' } },
+    });
+    return rows.map(r => ({
+      id: r.id,
+      patientId: r.patientId,
+      healthPlanId: r.healthPlanId,
+      cardNumber: r.cardNumber,
+      expiryDate: r.expiryDate.toISOString(),
+      healthPlan: this.toPlanResult(r.healthPlan),
+    }));
   }
 
-  verifyCoverage(patientId: string, healthPlanId: string): { covered: boolean; coveragePercentage: number } {
-    const plan = this.plans.get(healthPlanId);
+  async verifyCoverage(patientId: string, healthPlanId: string, actor: AuthUser): Promise<{ covered: boolean; coveragePercentage: number }> {
+    if (actor.role === Role.PATIENT && actor.id !== patientId) {
+      throw new ForbiddenException('You can only verify your own coverage');
+    }
+    const plan = await this.prisma.healthPlan.findUnique({ where: { id: healthPlanId } });
     if (!plan || !plan.isActive) return { covered: false, coveragePercentage: 0 };
-    const hasPlan = Array.from(this.patientPlans.values()).some(
-      pp => pp.patientId === patientId && pp.healthPlanId === healthPlanId
-    );
-    return { covered: hasPlan, coveragePercentage: hasPlan ? plan.coveragePercentage : 0 };
+    const assignment = await this.prisma.patientHealthPlan.findUnique({
+      where: { patientId_healthPlanId: { patientId, healthPlanId } },
+    });
+    if (!assignment) return { covered: false, coveragePercentage: 0 };
+    if (assignment.expiryDate < new Date()) return { covered: false, coveragePercentage: 0 };
+    return { covered: true, coveragePercentage: plan.coveragePercentage };
   }
 
-  removePatientPlan(id: string): void {
-    if (!this.patientPlans.has(id)) throw new NotFoundException(`Patient plan ${id} not found`);
-    this.patientPlans.delete(id);
+  async removePatientPlan(id: string): Promise<void> {
+    const row = await this.prisma.patientHealthPlan.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException(`Patient plan ${id} not found`);
+    await this.prisma.patientHealthPlan.delete({ where: { id } });
+  }
+
+  private toPlanResult(plan: {
+    id: string;
+    name: string;
+    provider: string;
+    coveragePercentage: number;
+    isActive: boolean;
+    createdAt: Date;
+  }): HealthPlan {
+    return {
+      id: plan.id,
+      name: plan.name,
+      provider: plan.provider,
+      coveragePercentage: plan.coveragePercentage,
+      isActive: plan.isActive,
+      createdAt: plan.createdAt.toISOString(),
+    };
   }
 }
+
+export { CreateHealthPlanDto, UpdateHealthPlanDto, AssignPlanDto } from './dto/health-plan.dto';

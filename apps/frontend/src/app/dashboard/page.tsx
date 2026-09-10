@@ -1,8 +1,17 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/stores/auth.store';
 import { Calendar, Users, Stethoscope, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
+import { api } from '@/lib/api';
+
+interface DoctorProfile {
+  id: string;
+  licenseNumber: string;
+  bio?: string;
+  specialties: { id: string; name: string }[];
+}
 
 const stats = [
   { label: 'Consultas Hoje', value: '12', icon: Calendar, color: 'text-blue-600 bg-blue-50', href: '/dashboard/appointments' },
@@ -13,6 +22,19 @@ const stats = [
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
+  const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
+  const [loadingDoctor, setLoadingDoctor] = useState(false);
+
+  useEffect(() => {
+    if (user?.role === 'DOCTOR') {
+      setLoadingDoctor(true);
+      api
+        .get(`/doctors/by-user/${user.id}`)
+        .then(({ data }) => setDoctor(data))
+        .catch(() => setDoctor(null))
+        .finally(() => setLoadingDoctor(false));
+    }
+  }, [user]);
 
   return (
     <div className="space-y-6">
@@ -20,6 +42,22 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold text-gray-900">Bem-vindo, {user?.name || 'Usuário'}</h1>
         <p className="text-gray-500 mt-1">Visão geral do sistema OdontoAura</p>
       </div>
+      {user?.role === 'DOCTOR' && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900">Meu Perfil de Médico</h2>
+          {loadingDoctor ? (
+            <p className="text-gray-500 text-sm mt-2">Carregando...</p>
+          ) : doctor ? (
+            <div className="mt-3 space-y-1 text-sm text-gray-600">
+              <p><span className="font-medium">CRM:</span> {doctor.licenseNumber}</p>
+              <p><span className="font-medium">Especialidade:</span> {doctor.specialties.map((s) => s.name).join(', ') || '-'}</p>
+              {doctor.bio && <p>{doctor.bio}</p>}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm mt-2">Sem perfil de médico vinculado. Procure a administração.</p>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => {
           const Icon = stat.icon;

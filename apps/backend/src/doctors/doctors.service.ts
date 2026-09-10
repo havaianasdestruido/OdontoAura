@@ -1,16 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-
-export interface CreateDoctorDto {
-  userId: string;
-  licenseNumber: string;
-  bio?: string;
-  specialtyIds: string[];
-}
-
-export interface UpdateDoctorDto {
-  bio?: string;
-  specialtyIds?: string[];
-}
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, Role } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreateDoctorDto, UpdateDoctorDto, CreateAvailabilityDto } from './dto/doctor.dto';
+import { AuthUser } from '../common/auth-user';
 
 export interface DoctorProfile {
   id: string;
@@ -31,71 +23,165 @@ export interface AvailabilitySlot {
 
 @Injectable()
 export class DoctorsService {
-  private readonly doctors = new Map<string, DoctorProfile>();
-  private readonly availability = new Map<string, AvailabilitySlot[]>();
-  private idCounter = 1;
-  private slotCounter = 1;
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: CreateDoctorDto): DoctorProfile {
-    const id = `doc_${this.idCounter++}`;
-    const doctor = {
-      id,
-      userId: dto.userId,
-      licenseNumber: dto.licenseNumber,
-      bio: dto.bio,
-      specialties: dto.specialtyIds.map(id => ({ id, name: `Specialty ${id}` })),
-      availability: [],
-      createdAt: new Date().toISOString(),
+  async create(dto: CreateDoctorDto): Promise<DoctorProfile> {
+    const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
+    if (!user) throw new NotFoundException(`User ${dto.userId} not found`);
+    if (user.role !== Role.DOCTOR) {
+      throw new BadRequestException('User must have role DOCTOR to have a doctor profile');
+    }
+
+    const specialty = await this.prisma.specialty.findUnique({ where: { id: dto.specialtyId } });
+    if (!specialty) throw new NotFoundException(`Specialty ${dto.specialtyId} not found`);
+
+    const existingLicense = await this.prisma.doctorProfile.findUnique({ where: { licenseNumber: dto.licenseNumber } });
+    if (existingLicense) throw new ConflictException(`License ${dto.licenseNumber} is already in use`);
+
+    let doctor;
+    try {
+      doctor = await this.prisma.doctorProfile.create({
+        data: {
+          userId: dto.userId,
+          licenseNumber: dto.licenseNumber,
+          bio: dto.bio,
+          specialtyId: dto.specialtyId,
+        },
+        include: { specialty: true },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException(`Doctor profile already exists for user ${dto.userId} or license ${dto.licenseNumber}`);
+      }
+      throw e;
+    }
+    return this.toResult(doctor, []);
+  }
+
+  async findAll(): Promise<DoctorProfile[]> {
+    const doctors = await this.prisma.doctorProfile.findMany({
+      include: { specialty: true, availabilitySlots: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return doctors.map(d => this.toResult(d, d.availabilitySlots));
+  }
+
+  async findOne(id: string): Promise<DoctorProfile> {
+    const doctor = await this.prisma.doctorProfile.findUnique({
+      where: { id },
+      include: { specialty: true, availabilitySlots: true },
+    });
+    if (!doctor) throw new NotFoundException(`Doctor ${id} not found`);
+    return this.toResult(doctor, doctor.availabilitySlots);
+  }
+
+  async findByUser(userId: string): Promise<DoctorProfile | undefined> {
+    const doctor = await this.prisma.doctorProfile.findUnique({
+      where: { userId },
+      include: { specialty: true, availabilitySlots: true },
+    });
+    return doctor ? this.toResult(doctor, doctor.availabilitySlots) : undefined;
+  }
+
+  async update(id: string, dto: UpdateDoctorDto, actor: AuthUser): Promise<DoctorProfile> {
+    const existing = await this.prisma.doctorProfile.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException(`Doctor ${id} not found`);
+    if (actor.role === Role.DOCTOR && existing.userId !== actor.id) {
+      throw new ForbiddenException('A doctor can only update their own profile');
+    }
+    if (dto.specialtyId) {
+      const specialty = await this.prisma.specialty.findUnique({ where: { id: dto.specialtyId } });
+      if (!specialty) throw new NotFoundException(`Specialty ${dto.specialtyId} not found`);
+    }
+
+    const data = {
+      ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
+      ...(dto.specialtyId ? { specialtyId: dto.specialtyId } : {}),
     };
-    this.doctors.set(id, doctor);
-    this.availability.set(id, []);
-    return this.toResult(doctor);
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Nothing to update');
+    }
+
+    const doctor = await this.prisma.doctorProfile.update({
+      where: { id },
+      data,
+      include: { specialty: true, availabilitySlots: true },
+    });
+    return this.toResult(doctor, doctor.availabilitySlots);
   }
 
-  findAll(): DoctorProfile[] {
-    return Array.from(this.doctors.values()).map(d => this.toResult(d));
+  async addAvailability(doctorId: string, slot: CreateAvailabilityDto, actor: AuthUser): Promise<AvailabilitySlot> {
+    const doctor = await this.findOne(doctorId);
+    if (actor.role === Role.DOCTOR && doctor.userId !== actor.id) {
+      throw new ForbiddenException('A doctor can only manage their own availability');
+    }
+    if (slot.dayOfWeek < 0 || slot.dayOfWeek > 6) {
+      throw new BadRequestException('dayOfWeek must be between 0 (Sunday) and 6 (Saturday)');
+    }
+    if (slot.startTime >= slot.endTime) {
+      throw new BadRequestException('startTime must be before endTime');
+    }
+    const overlapping = await this.prisma.availabilitySlot.findFirst({
+      where: {
+        doctorId,
+        dayOfWeek: slot.dayOfWeek,
+        startTime: { lt: slot.endTime },
+        endTime: { gt: slot.startTime },
+      },
+    });
+    if (overlapping) {
+      throw new ConflictException(`Availability already exists for day ${slot.dayOfWeek} ${slot.startTime}-${slot.endTime}`);
+    }
+    const created = await this.prisma.availabilitySlot.create({
+      data: { doctorId, dayOfWeek: slot.dayOfWeek, startTime: slot.startTime, endTime: slot.endTime },
+    });
+    return {
+      id: created.id,
+      dayOfWeek: created.dayOfWeek,
+      startTime: created.startTime,
+      endTime: created.endTime,
+    };
   }
 
-  findOne(id: string): DoctorProfile {
-    const doctor = this.doctors.get(id);
+  async getAvailability(doctorId: string): Promise<AvailabilitySlot[]> {
+    await this.findOne(doctorId);
+    const slots = await this.prisma.availabilitySlot.findMany({
+      where: { doctorId },
+      orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
+    });
+    return slots.map(s => ({
+      id: s.id,
+      dayOfWeek: s.dayOfWeek,
+      startTime: s.startTime,
+      endTime: s.endTime,
+    }));
+  }
+
+  async remove(id: string): Promise<void> {
+    const doctor = await this.prisma.doctorProfile.findUnique({ where: { id } });
     if (!doctor) throw new NotFoundException(`Doctor ${id} not found`);
-    return this.toResult(doctor);
+    await this.prisma.doctorProfile.delete({ where: { id } });
   }
 
-  findByUser(userId: string): DoctorProfile | undefined {
-    const doctor = Array.from(this.doctors.values()).find(d => d.userId === userId);
-    return doctor ? this.toResult(doctor) : undefined;
-  }
-
-  update(id: string, dto: UpdateDoctorDto): DoctorProfile {
-    const doctor = this.doctors.get(id);
-    if (!doctor) throw new NotFoundException(`Doctor ${id} not found`);
-    if (dto.bio !== undefined) doctor.bio = dto.bio;
-    if (dto.specialtyIds) doctor.specialties = dto.specialtyIds.map(id => ({ id, name: `Specialty ${id}` }));
-    return this.toResult(doctor);
-  }
-
-  addAvailability(doctorId: string, slot: Omit<AvailabilitySlot, 'id'>): AvailabilitySlot {
-    if (!this.doctors.has(doctorId)) throw new NotFoundException(`Doctor ${doctorId} not found`);
-    const newSlot: AvailabilitySlot = { ...slot, id: `slot_${this.slotCounter++}` };
-    const slots = this.availability.get(doctorId) || [];
-    slots.push(newSlot);
-    this.availability.set(doctorId, slots);
-    return newSlot;
-  }
-
-  getAvailability(doctorId: string): AvailabilitySlot[] {
-    if (!this.doctors.has(doctorId)) throw new NotFoundException(`Doctor ${doctorId} not found`);
-    return this.availability.get(doctorId) || [];
-  }
-
-  remove(id: string): void {
-    if (!this.doctors.has(id)) throw new NotFoundException(`Doctor ${id} not found`);
-    this.doctors.delete(id);
-    this.availability.delete(id);
-  }
-
-  private toResult(doctor: DoctorProfile): DoctorProfile {
-    return { ...doctor, availability: this.availability.get(doctor.id) || [] };
+  private toResult(
+    doctor: { id: string; userId: string; licenseNumber: string; bio: string | null; createdAt: Date; specialty: { id: string; name: string } },
+    slots: { id: string; dayOfWeek: number; startTime: string; endTime: string }[],
+  ): DoctorProfile {
+    return {
+      id: doctor.id,
+      userId: doctor.userId,
+      licenseNumber: doctor.licenseNumber,
+      bio: doctor.bio ?? undefined,
+      specialties: [{ id: doctor.specialty.id, name: doctor.specialty.name }],
+      availability: slots.map(s => ({
+        id: s.id,
+        dayOfWeek: s.dayOfWeek,
+        startTime: s.startTime,
+        endTime: s.endTime,
+      })),
+      createdAt: doctor.createdAt.toISOString(),
+    };
   }
 }
+
+export { CreateDoctorDto, UpdateDoctorDto, CreateAvailabilityDto } from './dto/doctor.dto';

@@ -46,16 +46,21 @@ const roleColors: Record<string, string> = {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { user, logout, hydrate } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    if (!user) {
+    hydrate().finally(() => setHydrated(true));
+  }, [hydrate]);
+
+  useEffect(() => {
+    if (hydrated && !user) {
       router.push('/auth/login');
     }
-  }, [user, router]);
+  }, [hydrated, user, router]);
 
-  if (!user) return null;
+  if (!hydrated || !user) return null;
 
   const navItems = roleNavItems[user.role] || roleNavItems.PATIENT;
 
