@@ -102,9 +102,11 @@ export class MedicalRecordsService {
   }
 
   private async assertCanEdit(appointmentId: string, actor: AuthUser): Promise<void> {
-    const doctorProfile = await this.prisma.doctorProfile.findUnique({ where: { userId: actor.id } });
+    const [doctorProfile, appointment] = await Promise.all([
+      this.prisma.doctorProfile.findUnique({ where: { userId: actor.id } }),
+      this.prisma.appointment.findUnique({ where: { id: appointmentId }, select: { doctorId: true } }),
+    ]);
     if (!doctorProfile) throw new ForbiddenException('Doctor has no profile');
-    const appointment = await this.prisma.appointment.findUnique({ where: { id: appointmentId }, select: { doctorId: true } });
     if (!appointment) throw new NotFoundException(`Appointment ${appointmentId} not found`);
     if (appointment.doctorId !== doctorProfile.id) {
       throw new ForbiddenException('Only the appointment doctor can edit this medical record');

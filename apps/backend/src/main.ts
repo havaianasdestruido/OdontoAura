@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import compress from '@fastify/compress';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -10,7 +11,10 @@ async function bootstrap() {
     new FastifyAdapter(),
   );
 
+  await app.register(compress, { threshold: 1024 });
+
   app.setGlobalPrefix('api');
+  // TODO: restrict CORS origins via env config instead of allowing all origins
   app.enableCors();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 

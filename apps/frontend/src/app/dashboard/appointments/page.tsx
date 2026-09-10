@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -17,6 +18,7 @@ interface Appt {
   notes?: string;
 }
 
+// TODO: extract to shared utility (roleColors in dashboard/layout is similar)
 const statusColors: Record<string, string> = {
   SCHEDULED: 'bg-yellow-100 text-yellow-800',
   CONFIRMED: 'bg-blue-100 text-blue-800',
@@ -28,11 +30,7 @@ const statusColors: Record<string, string> = {
 
 export default function AppointmentsPage() {
   const { user } = useAuthStore();
-  const [appointments, setAppointments] = useState<Appt[]>([]);
-  const [specialties, setSpecialties] = useState<Specialty[]>([]);
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [patientOptions, setPatientOptions] = useState<{ id: string; name: string }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
 
@@ -46,33 +44,57 @@ export default function AppointmentsPage() {
   const isStaff = user?.role === 'EMPLOYEE' || user?.role === 'ADMIN';
   const isPatient = user?.role === 'PATIENT';
 
-  async function loadAppointments() {
-    const { data } = await api.get<Appt[]>('/appointments');
-    setAppointments(data || []);
-  }
+  const appointmentsQuery = useQuery({
+    queryKey: ['appointments'],
+    queryFn: async () => (await api.get<Appt[]>('/appointments')).data ?? [],
+  });
+  const doctorsQuery = useQuery({
+    queryKey: ['doctors'],
+    queryFn: async () => (await api.get<Doctor[]>('/doctors')).data ?? [],
+  });
+  const specialtiesQuery = useQuery({
+    queryKey: ['specialties'],
+    queryFn: async () => (await api.get<Specialty[]>('/specialties')).data ?? [],
+  });
+  const patientOptionsQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => (await api.get<{ id: string; name: string; role: string }[]>('/users')).data ?? [],
+    enabled: isStaff,
+    select: (data) => data.filter((x) => x.role === 'PATIENT'),
+  });
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const appointmentsRes = await api.get<Appt[]>('/appointments');
-        const doctorsRes = await api.get<Doctor[]>('/doctors');
-        const specialtiesRes = await api.get<Specialty[]>('/specialties');
-        setAppointments(appointmentsRes.data || []);
-        setDoctors(doctorsRes.data || []);
-        setSpecialties(specialtiesRes.data || []);
-        if (isStaff) {
-          const usersRes = await api.get<{ id: string; name: string; role: string }[]>('/users');
-          setPatientOptions((usersRes.data || []).filter((x) => x.role === 'PATIENT'));
-        }
-      } catch (e) {
-        setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao carregar consultas');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [isStaff]);
+  const appointments = appointmentsQuery.data ?? [];
+  const doctors = doctorsQuery.data ?? [];
+  const specialties = specialtiesQuery.data ?? [];
+  const patientOptions = patientOptionsQuery.data ?? [];
+  const loadError = appointmentsQuery.error || doctorsQuery.error || specialtiesQuery.error
+    ? 'Erro ao carregar consultas'
+    : '';
+  const loading = appointmentsQuery.isPending || doctorsQuery.isPending || specialtiesQuery.isPending || (isStaff && patientOptionsQuery.isPending);
 
-  async function create() {
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      await api.post('/appointments', {
+        patientId: isPatient ? user!.id : patientId,
+        doctorId,
+        specialtyId,
+        scheduledAt: new Date(scheduledAt).toISOString(),
+        durationMinutes,
+        notes: notes || undefined,
+      });
+    },
+    onSuccess: () => {
+      setPatientId(''); setDoctorId(''); setSpecialtyId(''); setScheduledAt(''); setNotes(''); setDurationMinutes(30);
+      setShowForm(false);
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+    },
+    onError: (e) => {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(msg || 'Erro ao agendar consulta');
+    },
+  });
+
+  function create() {
     setError('');
     if (!user || !doctorId || !specialtyId || !scheduledAt) {
       setError('Preencha médico, especialidade e data/horário.');
@@ -82,22 +104,7 @@ export default function AppointmentsPage() {
       setError('Selecione o paciente para o agendamento.');
       return;
     }
-    try {
-      await api.post('/appointments', {
-        patientId: isPatient ? user.id : patientId,
-        doctorId,
-        specialtyId,
-        scheduledAt: new Date(scheduledAt).toISOString(),
-        durationMinutes,
-        notes: notes || undefined,
-      });
-      setPatientId(''); setDoctorId(''); setSpecialtyId(''); setScheduledAt(''); setNotes(''); setDurationMinutes(30);
-      setShowForm(false);
-      await loadAppointments();
-    } catch (e) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || 'Erro ao agendar consulta');
-    }
+    createMutation.mutate();
   }
 
   if (loading) return <p className="text-gray-500">Carregando...</p>;
@@ -112,7 +119,7 @@ export default function AppointmentsPage() {
           </button>
         )}
       </div>
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {(error || loadError) && <p className="text-red-500 text-sm">{error || loadError}</p>}
       {showForm && user?.role !== 'DOCTOR' && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
           <h2 className="text-lg font-semibold text-gray-900">Agendar consulta</h2>

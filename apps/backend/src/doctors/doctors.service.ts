@@ -59,6 +59,7 @@ export class DoctorsService {
   }
 
   async findAll(): Promise<DoctorProfile[]> {
+    // TODO: add pagination (take/skip) to prevent unbounded result sets
     const doctors = await this.prisma.doctorProfile.findMany({
       include: { specialty: true, availabilitySlots: true },
       orderBy: { createdAt: 'asc' },
@@ -111,7 +112,8 @@ export class DoctorsService {
   }
 
   async addAvailability(doctorId: string, slot: CreateAvailabilityDto, actor: AuthUser): Promise<AvailabilitySlot> {
-    const doctor = await this.findOne(doctorId);
+    const doctor = await this.prisma.doctorProfile.findUnique({ where: { id: doctorId }, select: { userId: true } });
+    if (!doctor) throw new NotFoundException(`Doctor ${doctorId} not found`);
     if (actor.role === Role.DOCTOR && doctor.userId !== actor.id) {
       throw new ForbiddenException('A doctor can only manage their own availability');
     }
@@ -144,7 +146,8 @@ export class DoctorsService {
   }
 
   async getAvailability(doctorId: string): Promise<AvailabilitySlot[]> {
-    await this.findOne(doctorId);
+    const doctor = await this.prisma.doctorProfile.findUnique({ where: { id: doctorId }, select: { id: true } });
+    if (!doctor) throw new NotFoundException(`Doctor ${doctorId} not found`);
     const slots = await this.prisma.availabilitySlot.findMany({
       where: { doctorId },
       orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
