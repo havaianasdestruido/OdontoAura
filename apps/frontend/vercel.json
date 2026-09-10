@@ -1,0 +1,4 @@
+{
+  "buildCommand": "cd ../.. && pnpm --filter @odontoaura/shared run build && pnpm --filter @odontoaura/frontend run build",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile"
+}
