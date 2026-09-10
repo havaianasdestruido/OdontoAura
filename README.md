@@ -2,7 +2,7 @@
 
 Sistema de gerenciamento, agendamento e manutenção de pacientes, horários, consultas e seleção de especialidades médicas.
 
-O **Medcn** é construído utilizando tecnologias modernas e robustas para garantir alta disponibilidade, performance, segurança e boa experiência de usuário.
+O **OdontoAura** é construído utilizando tecnologias modernas e robustas para garantir alta disponibilidade, performance, segurança e boa experiência de usuário.
 
 ## Stack Tecnológica
 
