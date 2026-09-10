@@ -1,6 +1,12 @@
 {
   "buildCommand": "cd ../.. && pnpm --filter @odontoaura/shared run build && pnpm --filter @odontoaura/backend run build",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ],
   "functions": {
     "api/**/*.ts": {
       "maxDuration": 30,
