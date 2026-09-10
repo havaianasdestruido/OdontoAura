@@ -14,10 +14,17 @@ export function createApp() {
     app.use(compression({ threshold: 1024 }));
 
   app.setGlobalPrefix('api');
-  const allowedOrigins = process.env.CORS_ORIGIN?.split(',')
+  const defaultOrigins = [
+    'http://localhost:3000',
+    'https://odonto-aura-frontend.vercel.app',
+  ];
+  const envOrigins = process.env.CORS_ORIGIN?.split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
-  app.enableCors({ origin: allowedOrigins?.length ? allowedOrigins : false });
+  const allowedOrigins = Array.from(
+    new Set([...(envOrigins || []), ...defaultOrigins]),
+  );
+  app.enableCors({ origin: allowedOrigins });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   // TODO: register global ExceptionFilter so UnauthorizedException/ForbiddenException return proper status codes instead of 500
 
