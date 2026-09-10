@@ -15,6 +15,7 @@ export class CreateDoctorDto {
   @IsUUID()
   userId!: string;
 
+  // TODO: add @Transform to trim licenseNumber — whitespace enters DB and causes false uniqueness conflicts
   @ApiProperty({ example: 'CRM-123456' })
   @IsString()
   @MaxLength(30)
@@ -51,6 +52,7 @@ export class CreateAvailabilityDto {
   @Max(6)
   dayOfWeek!: number;
 
+  // TODO: startTime/endTime allow non-granular times (e.g. 09:07) — enforce configurable slot interval
   @ApiProperty({ example: '08:00' })
   @IsString()
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'startTime must be HH:MM' })

@@ -23,6 +23,7 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   @MaxLength(30)
+  // TODO: add @Matches(/^\+?[1-9]\d{1,14}$/) to enforce E.164 phone format
   phone?: string;
 
   @ApiProperty({ enum: Role })
@@ -34,6 +35,7 @@ export class CreateUserDto {
   @IsString()
   @MinLength(6)
   @MaxLength(72)
+  // TODO: add password complexity regex (uppercase, digit, special char) via @Matches
   password?: string;
 }
 

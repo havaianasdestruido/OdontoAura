@@ -22,6 +22,7 @@ function dayName(d: number) {
   return ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][d] ?? d;
 }
 
+// TODO: migrate to useQuery (appointments page is already migrated)
 export default function DoctorsPage() {
   const { user } = useAuthStore();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -116,6 +117,7 @@ function CreateDoctorModal({ onClose, onCreated, specialties, users }: {
       await onCreated();
       onClose();
     } catch (e) {
+      // TODO: map backend errors (e.g. "user already has doctor profile") to user-friendly PT messages
       setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao criar médico');
     } finally {
       setLoading(false);
@@ -139,6 +141,7 @@ function CreateDoctorModal({ onClose, onCreated, specialties, users }: {
         {error && <p className="text-red-500 text-sm">{error}</p>}
         <div className="flex gap-2 justify-end">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+          {/* TODO: also disable when userId, licenseNumber or specialtyId are empty to prevent unnecessary 400 */}
           <button onClick={create} disabled={loading} className="bg-primary-600 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
             {loading ? 'Criando...' : 'Criar'}
           </button>

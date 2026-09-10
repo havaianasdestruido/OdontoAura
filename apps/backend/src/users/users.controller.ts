@@ -41,6 +41,7 @@ export class UsersController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Update user (Admin only)' })
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
+    // TODO: guard against role escalation — reject DTOs that set role=ADMIN unless caller is super-admin
     return this.usersService.update(id, dto);
   }
 
@@ -48,6 +49,7 @@ export class UsersController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Delete user (Admin only)' })
   remove(@Param('id', ParseUUIDPipe) id: string) {
+    // TODO: prevent admin from deleting own account or other admins without confirmation
     return this.usersService.remove(id);
   }
 }

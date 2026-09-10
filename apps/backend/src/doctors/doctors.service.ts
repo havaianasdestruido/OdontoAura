@@ -35,6 +35,7 @@ export class DoctorsService {
     const specialty = await this.prisma.specialty.findUnique({ where: { id: dto.specialtyId } });
     if (!specialty) throw new NotFoundException(`Specialty ${dto.specialtyId} not found`);
 
+    // TODO: trim and normalize licenseNumber before uniqueness check — whitespace/casing causes false conflicts
     const existingLicense = await this.prisma.doctorProfile.findUnique({ where: { licenseNumber: dto.licenseNumber } });
     if (existingLicense) throw new ConflictException(`License ${dto.licenseNumber} is already in use`);
 
@@ -67,6 +68,7 @@ export class DoctorsService {
     return doctors.map(d => this.toResult(d, d.availabilitySlots));
   }
 
+  // TODO: scope findOne by ownership — any auth'd user can read any doctor profile incl. licenseNumber
   async findOne(id: string): Promise<DoctorProfile> {
     const doctor = await this.prisma.doctorProfile.findUnique({
       where: { id },
@@ -160,6 +162,7 @@ export class DoctorsService {
     }));
   }
 
+  // TODO: remove() does hard delete — will throw FK constraint from appointments; consider soft-delete
   async remove(id: string): Promise<void> {
     const doctor = await this.prisma.doctorProfile.findUnique({ where: { id } });
     if (!doctor) throw new NotFoundException(`Doctor ${id} not found`);

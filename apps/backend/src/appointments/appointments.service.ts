@@ -47,18 +47,21 @@ export class AppointmentsService {
     if (!doctor) throw new NotFoundException(`Doctor ${dto.doctorId} not found`);
     if (!specialty) throw new NotFoundException(`Specialty ${dto.specialtyId} not found`);
 
+    // TODO: normalize scheduledAt to UTC — frontend local datetime causes DST/timezone drift
     const scheduledDate = new Date(dto.scheduledAt);
     if (Number.isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
       throw new BadRequestException('Appointment must be scheduled for a future date');
     }
     const duration = dto.durationMinutes ?? 30;
 
+    // TODO: validate against doctor availability_slots — appointment could be outside available hours
     const doctorConflict = await this.findOverlap({ doctorId: dto.doctorId }, scheduledDate, duration);
     if (doctorConflict) throw new ConflictException('Doctor already has an appointment at this time');
 
     const patientConflict = await this.findOverlap({ patientId: dto.patientId }, scheduledDate, duration);
     if (patientConflict) throw new ConflictException('Patient already has an appointment at this time');
 
+    // TODO: wrap conflict checks + create in a transaction to prevent race-condition double-booking
     return this.prisma.appointment
       .create({
         data: {
@@ -87,6 +90,7 @@ export class AppointmentsService {
         where.doctorId = profile.id;
       }
     }
+    // TODO: add pagination (take/skip) to prevent unbounded result sets
     const appointments = await this.prisma.appointment.findMany({
       where,
       orderBy: { scheduledAt: 'asc' },
@@ -144,6 +148,7 @@ export class AppointmentsService {
   }
 
   async cancel(id: string, actor?: AuthUser): Promise<Appointment> {
+    // TODO: enforce cancel only before scheduledAt — allow admin override with reason
     const apt = await this.getAppointment(id);
     const isStaff = actor?.role === Role.ADMIN || actor?.role === Role.EMPLOYEE;
     const isOwner = actor?.id === apt.patientId;

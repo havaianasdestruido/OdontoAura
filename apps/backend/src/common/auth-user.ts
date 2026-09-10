@@ -4,5 +4,6 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
+  // TODO: add optional sessionId or deviceId field to support per-device token revocation
   role: Role;
 }

@@ -60,6 +60,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [hydrated, user, router]);
 
+  // TODO: add loading spinner during hydration instead of rendering blank screen
   if (!hydrated || !user) return null;
 
   const navItems = roleNavItems[user.role] || roleNavItems.PATIENT;
@@ -103,6 +104,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               {roleLabels[user.role]}
             </span>
             <span className="text-sm text-gray-700 hidden sm:block">{user.name}</span>
+            {/* TODO: clear react-query cache on logout so stale data does not leak into next session */}
             <button onClick={() => { logout(); router.push('/auth/login'); }} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700" title="Sair">
               <LogOut className="w-5 h-5" />
             </button>

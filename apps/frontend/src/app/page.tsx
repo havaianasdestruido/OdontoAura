@@ -14,6 +14,7 @@ export default function Home() {
             { title: 'Recepção', desc: 'Gerencie a fila do dia', href: '/auth/login', color: 'bg-green-500' },
             { title: 'Médico', desc: 'Acesse sua agenda', href: '/auth/login', color: 'bg-purple-500' },
             { title: 'Admin', desc: 'Painel de controle', href: '/auth/login', color: 'bg-orange-500' },
+          // TODO: add aria-label for screen readers and focus-visible:ring-2 for keyboard navigation
           ].map((item) => (
             <Link key={item.title} href={item.href} className="group block bg-white rounded-xl shadow-md hover:shadow-lg transition-all p-6 text-center">
               <div className={`w-12 h-12 ${item.color} rounded-full mx-auto mb-4 flex items-center justify-center text-white font-bold text-lg`}>

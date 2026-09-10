@@ -1,6 +1,10 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
+  // TODO: Add safelist for dynamically composed class strings (e.g. statusColors, item.color) to prevent JIT purging
+  // TODO: explicitly add ./src/app/**/*.ts and ./src/components/**/*.ts to content — verify non-.tsx TS files aren't missed by the glob on some Tailwind versions
+  // TODO: verify content glob covers all .ts files (not just .tsx) — utility modules or config files using dynamic classes may be purged if only .ts extension is present
+  // TODO: add darkMode: 'class' if dark-theme toggle is planned — without it, dark: variant classes are always purged
   content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   theme: {
     extend: {
@@ -10,6 +14,7 @@ const config: Config = {
       },
     },
   },
+  // TODO: add darkMode: 'class' if dark-theme toggle is planned — without it, dark: variant classes are always purged
   plugins: [],
 };
 

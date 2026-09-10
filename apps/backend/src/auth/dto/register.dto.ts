@@ -3,6 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterDto {
   @ApiProperty({ example: 'patient@example.com' })
+  // TODO: add @Transform(({ value }) => value?.toLowerCase()) to normalize email before validation
   @IsEmail()
   email!: string;
 
@@ -10,6 +11,7 @@ export class RegisterDto {
   @IsString()
   @MinLength(6)
   @MaxLength(72)
+  // TODO: add @Matches(/^(?=.*[A-Z])(?=.*\d)/) to enforce at least one uppercase and one digit
   password!: string;
 
   @ApiProperty({ example: 'João Silva' })

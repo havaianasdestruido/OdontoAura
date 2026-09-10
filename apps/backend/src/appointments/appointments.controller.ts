@@ -25,6 +25,7 @@ export class AppointmentsController {
   @ApiQuery({ name: 'patientId', required: false })
   @ApiQuery({ name: 'doctorId', required: false })
   @ApiQuery({ name: 'status', required: false, enum: AppointmentStatus })
+  // TODO: add pagination query params (take/skip) and wire into service findAll
   findAll(
     @Request() req: { user: AuthUser },
     @Query('patientId') patientId?: string,
@@ -55,6 +56,7 @@ export class AppointmentsController {
   @Put(':id/confirm')
   @Roles(Role.EMPLOYEE, Role.ADMIN)
   @ApiOperation({ summary: 'Confirm an appointment (Reception/Admin)' })
+  // TODO: pass req.user actor — current code bypasses assertCanManage entirely
   confirm(@Param('id', ParseUUIDPipe) id: string) {
     return this.appointmentsService.updateStatus(id, AppointmentStatus.CONFIRMED);
   }

@@ -16,7 +16,9 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   // TODO: restrict CORS origins via env config instead of allowing all origins
   app.enableCors();
+  // TODO: add forbidNonWhitelisted: true to ValidationPipe to reject unknown properties with 400
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  // TODO: register global ExceptionFilter so UnauthorizedException/ForbiddenException return proper status codes instead of 500
 
   const config = new DocumentBuilder()
     .setTitle('OdontoAura API')
@@ -26,6 +28,7 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
+  // TODO: gate Swagger behind auth or env check — hide /api/docs in production
   SwaggerModule.setup('api/docs', app, document);
 
   const port = process.env.PORT || 3001;

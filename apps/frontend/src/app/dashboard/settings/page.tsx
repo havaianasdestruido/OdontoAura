@@ -2,6 +2,7 @@
 
 import { useAuthStore } from '@/stores/auth.store';
 
+// TODO: convert to server component — only reads zustand store, pass user as prop
 export default function SettingsPage() {
   const { user } = useAuthStore();
 

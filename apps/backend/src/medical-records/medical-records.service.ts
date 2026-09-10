@@ -74,6 +74,7 @@ export class MedicalRecordsService {
     return this.toResult(record);
   }
 
+  // TODO: update() allows doctor to change all fields equally — restrict which fields DOCTOR vs ADMIN can modify (e.g. prescription edits may require admin)
   async update(id: string, dto: UpdateMedicalRecordDto, actor: AuthUser): Promise<MedicalRecord> {
     const record = await this.getRecord(id);
     await this.assertCanEdit(record.appointmentId, actor);
@@ -90,6 +91,8 @@ export class MedicalRecordsService {
     return this.toResult(updated);
   }
 
+  // TODO: remove() has no actor parameter — no service-level authorization check; any module calling this bypasses controller guards
+  // TODO: hard-delete of medical records is irreversible — implement soft-delete or mark-void for audit compliance
   async remove(id: string): Promise<void> {
     await this.getRecord(id);
     await this.prisma.medicalRecord.delete({ where: { id } });

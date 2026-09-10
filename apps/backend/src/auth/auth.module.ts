@@ -12,9 +12,11 @@ import { JwtStrategy } from './jwt.strategy';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
+        // TODO: throw on missing JWT_SECRET in production instead of using 'dev-secret' fallback
         secret: config.get<string>('JWT_SECRET', 'dev-secret'),
         signOptions: {
           expiresIn: config.get<string>('JWT_EXPIRATION', '1h') as NonNullable<JwtModuleOptions['signOptions']>['expiresIn'],
+          // TODO: add issuer and audience to signOptions to match jwt.strategy.ts validation
         },
       }),
     }),
@@ -22,5 +24,6 @@ import { JwtStrategy } from './jwt.strategy';
   providers: [AuthService, JwtStrategy],
   controllers: [AuthController],
   exports: [AuthService, JwtModule, PassportModule],
+  // TODO: export RolesGuard so feature modules can import it without duplicating registration
 })
 export class AuthModule {}

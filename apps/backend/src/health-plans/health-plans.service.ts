@@ -26,6 +26,7 @@ export interface PatientPlan {
 export class HealthPlansService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // TODO: create() uniqueness check (findFirst) races with concurrent creates — catch Prisma P2002 or use a transaction with advisory lock
   async create(dto: CreateHealthPlanDto): Promise<HealthPlan> {
     const existing = await this.prisma.healthPlan.findFirst({
       where: { name: dto.name, provider: dto.provider },
@@ -44,6 +45,7 @@ export class HealthPlansService {
   }
 
   async findAll(activeOnly = false): Promise<HealthPlan[]> {
+    // TODO: add pagination (take/skip) to prevent unbounded result sets
     const plans = await this.prisma.healthPlan.findMany({
       where: activeOnly ? { isActive: true } : undefined,
       orderBy: { name: 'asc' },
@@ -57,6 +59,7 @@ export class HealthPlansService {
     return this.toPlanResult(plan);
   }
 
+  // TODO: update() does not re-validate (name, provider) uniqueness — changing name alone could collide with existing plan
   async update(id: string, dto: UpdateHealthPlanDto): Promise<HealthPlan> {
     await this.findOne(id);
     if (Object.keys(dto).length === 0) throw new BadRequestException('No fields to update');
@@ -64,6 +67,7 @@ export class HealthPlansService {
     return this.toPlanResult(plan);
   }
 
+  // TODO: remove() will throw raw FK constraint error if plan has patientHealthPlan references — handle gracefully or soft-delete
   async remove(id: string): Promise<void> {
     const plan = await this.prisma.healthPlan.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException(`Health plan ${id} not found`);

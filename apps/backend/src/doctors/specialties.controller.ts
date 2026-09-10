@@ -25,6 +25,7 @@ export class SpecialtiesController {
     return this.specialtiesService.findAll();
   }
 
+  // TODO: add PUT endpoint — cannot update existing specialty name or description
   @Get(':id')
   @ApiOperation({ summary: 'Get specialty by ID' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {

@@ -16,6 +16,7 @@ interface Record {
   createdAt: string;
 }
 
+// TODO: migrate to useQuery (appointments page is already migrated)
 export default function RecordsPage() {
   const { user } = useAuthStore();
   const [records, setRecords] = useState<Record[]>([]);

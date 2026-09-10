@@ -69,11 +69,13 @@ export class AssignPlanDto {
   @IsUUID()
   healthPlanId!: string;
 
+  // TODO: cardNumber has no format validation — add @Matches pattern to enforce expected card format (e.g. alphanumeric with dashes)
   @ApiProperty({ example: 'OURO-12345' })
   @IsString()
   @MaxLength(60)
   cardNumber!: string;
 
+  // TODO: expiryDate should be validated as a future date, not just any ISO8601 string
   @ApiProperty({ example: '2027-12-31T00:00:00.000Z' })
   @IsISO8601()
   expiryDate!: string;

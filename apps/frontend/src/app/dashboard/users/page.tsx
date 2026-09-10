@@ -12,6 +12,7 @@ interface User {
   phone?: string;
 }
 
+// TODO: migrate to useQuery (appointments page is already migrated)
 export default function UsersPage() {
   const { user } = useAuthStore();
   const [users, setUsers] = useState<User[]>([]);
@@ -74,9 +75,12 @@ export default function UsersPage() {
           <input className="border rounded-lg px-3 py-2 text-sm" placeholder="Senha temporária" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         {error && <p className="text-red-500 text-sm">{error}</p>}
+        {/* TODO: add client-side validation (rhf/zod) — name, email, and role are required by backend but unchecked here */}
         <button onClick={create} className="bg-primary-600 text-white text-sm font-medium px-4 py-2 rounded-lg">Criar usuário</button>
       </div>
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        {/* TODO: wrap table in overflow-x-auto for small screens */}
+        {/* TODO: add pagination — backend returns all users but list can grow large */}
         {loading ? (
           <p className="text-gray-500 p-6">Carregando...</p>
         ) : (

@@ -70,6 +70,7 @@ export class HealthPlansController {
     return this.healthPlansService.verifyCoverage(patientId, healthPlanId, req.user);
   }
 
+  // TODO: removePatientPlan() has no actor auth — any EMPLOYEE can remove any patient's plan assignment without ownership check
   @Delete('patient-plan/:id')
   @Roles(Role.ADMIN, Role.EMPLOYEE)
   @ApiOperation({ summary: 'Remove patient health plan' })

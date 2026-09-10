@@ -11,6 +11,7 @@ import { MedicalRecordsModule } from './medical-records/medical-records.module';
 
 @Module({
   imports: [
+    // TODO: add validationSchema (joi/zod) to ConfigModule.forRoot so missing/invalid env vars fail at boot
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     AuthModule,

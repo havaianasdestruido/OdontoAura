@@ -10,6 +10,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  // TODO: add @HttpCode(HttpStatus.CREATED) so register consistently returns 201
   @ApiOperation({ summary: 'Register a new user' })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
@@ -23,6 +24,7 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
+  // TODO: handle case where req.user is undefined to return structured 401 instead of relying on guard behavior
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current authenticated user' })
   getProfile(@Request() req: { user: { id: string; email: string; name: string; role: Role } }) {

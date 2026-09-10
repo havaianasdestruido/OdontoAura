@@ -13,6 +13,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
+      // TODO: add algorithms: ['HS256'] to restrict accepted JWT algorithms and prevent algorithm confusion attacks
+      // TODO: throw on missing JWT_SECRET in production instead of using 'dev-secret' fallback
       secretOrKey: configService.get<string>('JWT_SECRET', 'dev-secret'),
     });
   }

@@ -5,10 +5,13 @@ import { Providers } from './providers';
 
 const inter = Inter({ subsets: ['latin'] });
 
+// TODO: add openGraph (title, description, images) and robots (index, follow) to metadata
 export const metadata: Metadata = {
   title: 'OdontoAura - Gestão de Clínica',
   description: 'Sistema de gerenciamento e agendamento de consultas médicas',
 };
+
+// TODO: export viewport config with themeColor for mobile PWA support (Next.js 15)
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

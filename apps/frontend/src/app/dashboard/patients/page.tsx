@@ -12,6 +12,7 @@ interface Patient {
   role?: string;
 }
 
+// TODO: migrate to useQuery (appointments page is already migrated)
 export default function PatientsPage() {
   const { user } = useAuthStore();
   const [patients, setPatients] = useState<Patient[]>([]);

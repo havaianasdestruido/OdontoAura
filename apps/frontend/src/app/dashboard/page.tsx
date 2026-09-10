@@ -13,6 +13,7 @@ interface DoctorProfile {
   specialties: { id: string; name: string }[];
 }
 
+// TODO: fetch stats from API instead of hardcoding (e.g. today's appointments count, active patients, etc.)
 const stats = [
   { label: 'Consultas Hoje', value: '12', icon: Calendar, color: 'text-blue-600 bg-blue-50', href: '/dashboard/appointments' },
   { label: 'Pacientes Ativos', value: '348', icon: Users, color: 'text-green-600 bg-green-50', href: '/dashboard/patients' },
@@ -25,6 +26,7 @@ export default function DashboardPage() {
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [loadingDoctor, setLoadingDoctor] = useState(false);
 
+  // TODO: migrate to useQuery (appointments page is already migrated)
   useEffect(() => {
     if (user?.role === 'DOCTOR') {
       setLoadingDoctor(true);
@@ -32,6 +34,7 @@ export default function DashboardPage() {
         .get(`/doctors/by-user/${user.id}`)
         .then(({ data }) => setDoctor(data))
         .catch(() => setDoctor(null))
+        // TODO: expose error state and add retry button instead of silently falling back to null
         .finally(() => setLoadingDoctor(false));
     }
   }, [user]);
@@ -45,6 +48,7 @@ export default function DashboardPage() {
       {user?.role === 'DOCTOR' && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900">Meu Perfil de Médico</h2>
+          {/* TODO: show skeleton placeholder while doctor profile loads instead of plain text */}
           {loadingDoctor ? (
             <p className="text-gray-500 text-sm mt-2">Carregando...</p>
           ) : doctor ? (
@@ -76,6 +80,7 @@ export default function DashboardPage() {
           );
         })}
       </div>
+      {/* TODO: replace hardcoded upcoming-appointments list with real API data */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Próximas Consultas</h2>
         <div className="space-y-3">

@@ -20,6 +20,7 @@ interface MyPlan {
   healthPlan?: HealthPlan;
 }
 
+// TODO: migrate to useQuery (appointments page is already migrated)
 export default function HealthPlansPage() {
   const { user } = useAuthStore();
   const [plans, setPlans] = useState<HealthPlan[]>([]);
@@ -87,6 +88,7 @@ export default function HealthPlansPage() {
       </div>
       {error && <p className="text-red-500 text-sm">{error}</p>}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        {/* TODO: wrap table in overflow-x-auto for small screens */}
         {plans.length === 0 ? (
           <p className="text-gray-500 text-center py-8">Nenhum plano cadastrado</p>
         ) : (
@@ -149,6 +151,7 @@ function CreatePlanModal({ onClose, onCreated }: { onClose: () => void; onCreate
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-3" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-gray-900">Novo Plano de Saúde</h2>
+        {/* TODO: add client-side validation — name and provider are required but modal allows empty submit */}
         <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Nome do plano" value={name} onChange={(e) => setName(e.target.value)} />
         <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Conveniada" value={provider} onChange={(e) => setProvider(e.target.value)} />
         <input
@@ -162,6 +165,7 @@ function CreatePlanModal({ onClose, onCreated }: { onClose: () => void; onCreate
         />
         {error && <p className="text-red-500 text-sm">{error}</p>}
         <div className="flex gap-2 justify-end">
+          {/* TODO: add confirmation dialog before creating plan and optimistic update for instant feedback */}
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
           <button onClick={create} disabled={loading} className="bg-primary-600 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
             {loading ? 'Criando...' : 'Criar'}

@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+// TODO: add @ApiResponse decorators for error codes (404, 403, 409) — swagger docs incomplete
 import { DoctorsService, CreateDoctorDto, UpdateDoctorDto, CreateAvailabilityDto } from './doctors.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
@@ -20,6 +21,7 @@ export class DoctorsController {
     return this.doctorsService.create(dto);
   }
 
+  // TODO: findAll returns full profiles incl. licenseNumber to any auth'd user — limit fields per role
   @Get()
   @ApiOperation({ summary: 'List all doctors' })
   findAll() {
@@ -52,6 +54,7 @@ export class DoctorsController {
     return this.doctorsService.remove(id);
   }
 
+  // TODO: no PUT/DELETE endpoints for availability — cannot update or remove individual slots
   @Post(':id/availability')
   @Roles(Role.ADMIN, Role.DOCTOR)
   @ApiOperation({ summary: 'Add availability slot for a doctor' })

@@ -28,6 +28,7 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // TODO: add mode: 'onTouched' to useForm for inline validation feedback before submit
   const { register, handleSubmit, formState: { errors } } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
   });
@@ -47,6 +48,7 @@ export default function RegisterPage() {
       setAuth(user, access_token);
       router.push('/dashboard');
     } catch (err) {
+      // TODO: map 401 "Invalid credentials" or 409 "Email already exists" to localized PT messages
       const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(message || 'Erro ao criar conta');
     } finally {

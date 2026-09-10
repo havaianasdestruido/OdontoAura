@@ -13,6 +13,7 @@ export interface Specialty {
 export class SpecialtiesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // TODO: trim and normalize name before uniqueness check — casing/whitespace creates silent duplicates
   async create(dto: CreateSpecialtyDto): Promise<Specialty> {
     const existing = await this.prisma.specialty.findUnique({ where: { name: dto.name } });
     if (existing) throw new ConflictException(`Specialty "${dto.name}" already exists`);
@@ -21,10 +22,12 @@ export class SpecialtiesService {
   }
 
   async findAll(): Promise<Specialty[]> {
+    // TODO: add pagination (take/skip) to prevent unbounded result sets
     const specs = await this.prisma.specialty.findMany({ orderBy: { name: 'asc' } });
     return specs.map(this.toResult);
   }
 
+  // TODO: add update() method — specialty name/description immutable after creation
   async findOne(id: string): Promise<Specialty> {
     const spec = await this.prisma.specialty.findUnique({ where: { id } });
     if (!spec) throw new NotFoundException(`Specialty ${id} not found`);

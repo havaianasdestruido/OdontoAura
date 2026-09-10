@@ -22,6 +22,7 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    // TODO: hash password with pepper (env-based HMAC or argon2) in addition to bcrypt salt
     // TODO: race condition — findUnique + create is not atomic; catch P2002 unique violation instead
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new ConflictException('Email already registered');
@@ -43,6 +44,7 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     // TODO: add rate limiting on login to mitigate brute-force attacks
+    // TODO: normalize email to lowercase before lookup to avoid case-sensitive mismatches
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (!user) throw new UnauthorizedException('Invalid credentials');
 

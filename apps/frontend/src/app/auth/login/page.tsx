@@ -35,6 +35,7 @@ export default function LoginPage() {
       setAuth(user, access_token);
       router.push('/dashboard');
     } catch (err) {
+      // TODO: map 401 "Invalid credentials" to localized PT message ("Email ou senha incorretos")
       const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(message || 'Erro ao fazer login');
     } finally {
@@ -42,6 +43,7 @@ export default function LoginPage() {
     }
   }
 
+  // TODO: add loading.tsx and error.tsx route boundaries for /auth/login segment
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50 px-4">
       <div className="w-full max-w-md">

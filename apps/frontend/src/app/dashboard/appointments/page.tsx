@@ -48,6 +48,7 @@ export default function AppointmentsPage() {
     queryKey: ['appointments'],
     queryFn: async () => (await api.get<Appt[]>('/appointments')).data ?? [],
   });
+  // TODO: set enabled: showForm on doctors/specialties/patientOptions queries to avoid refetching when form is closed
   const doctorsQuery = useQuery({
     queryKey: ['doctors'],
     queryFn: async () => (await api.get<Doctor[]>('/doctors')).data ?? [],
@@ -148,6 +149,7 @@ export default function AppointmentsPage() {
             </select>
             <input className="border rounded-lg px-3 py-2 text-sm sm:col-span-2" placeholder="Observações (opcional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
+          {/* TODO: add disabled={createMutation.isPending} and loading text to prevent double-submit */}
           <button onClick={create} className="bg-primary-600 text-white text-sm font-medium px-4 py-2 rounded-lg">Confirmar agendamento</button>
         </div>
       )}
