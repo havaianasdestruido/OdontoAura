@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
-import { SpecialtiesService } from './specialties.service';
+import { SpecialtiesService, CreateSpecialtyDto } from './specialties.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 
@@ -15,8 +15,8 @@ export class SpecialtiesController {
   @Post()
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Create a new specialty (Admin)' })
-  create(@Body('name') name: string, @Body('description') description?: string) {
-    return this.specialtiesService.create(name, description);
+  create(@Body() dto: CreateSpecialtyDto) {
+    return this.specialtiesService.create(dto);
   }
 
   @Get()
@@ -27,14 +27,14 @@ export class SpecialtiesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get specialty by ID' })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.specialtiesService.findOne(id);
   }
 
   @Delete(':id')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Delete specialty (Admin)' })
-  remove(@Param('id') id: string) {
+  remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.specialtiesService.remove(id);
   }
 }
