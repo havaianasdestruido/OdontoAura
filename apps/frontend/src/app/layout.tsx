@@ -16,6 +16,20 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
+      <head>
+        <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              new window.VLibras.Widget({
+                rootPath: 'https://vlibras.gov.br/app',
+                avatar: 'random',
+                position: 'R',
+              });
+            `,
+          }}
+        />
+      </head>
       <body className={inter.className}>
         <Providers>{children}</Providers>
       </body>
