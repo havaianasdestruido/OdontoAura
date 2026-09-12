@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import Script from 'next/script';
 import './globals.css';
 import { Providers } from './providers';
 
@@ -16,22 +17,34 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      <head>
-        <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
-        <script
+      <body className={inter.className}>
+        <Providers>{children}</Providers>
+        <Script
+          src="https://vlibras.gov.br/app/vlibras-plugin.js"
+          strategy="afterInteractive"
+        />
+        <Script
+          id="vlibras-init"
+          strategy="afterInteractive"
           dangerouslySetInnerHTML={{
             __html: `
-              new window.VLibras.Widget({
-                rootPath: 'https://vlibras.gov.br/app',
-                avatar: 'random',
-                position: 'R',
-              });
+              (function () {
+                function init() {
+                  if (window.VLibras && window.VLibras.Widget) {
+                    new window.VLibras.Widget({
+                      rootPath: 'https://vlibras.gov.br/app',
+                      avatar: 'random',
+                      position: 'R',
+                    });
+                  } else {
+                    setTimeout(init, 200);
+                  }
+                }
+                init();
+              })();
             `,
           }}
         />
-      </head>
-      <body className={inter.className}>
-        <Providers>{children}</Providers>
       </body>
     </html>
   );

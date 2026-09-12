@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://odonto-aura-backend.vercel.app/api',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://backend-eta-pink.vercel.app/api',
   headers: { 'Content-Type': 'application/json' },
   timeout: 15000,
 });

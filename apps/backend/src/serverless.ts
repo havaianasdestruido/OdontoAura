@@ -1,4 +1,5 @@
 import { NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { OutgoingHttpHeaders } from 'node:http';
 import { createApp } from './app.bootstrap';
 
 let appPromise: Promise<NestFastifyApplication> | null = null;
@@ -22,8 +23,8 @@ interface ServerlessRequest {
 }
 
 interface ServerlessResponse {
-  writeHead: (statusCode: number, headers: Record<string, string | number | string[]>) => void;
-  end: (body: string) => void;
+  writeHead: (statusCode: number, headers?: OutgoingHttpHeaders) => void;
+  end: (body: string | Uint8Array) => void;
 }
 
 export default async function handler(req: ServerlessRequest, res: ServerlessResponse) {
