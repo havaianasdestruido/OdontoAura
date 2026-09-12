@@ -1,7 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { api, apiErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth.store';
 
 interface HealthPlan {
@@ -20,37 +24,40 @@ interface MyPlan {
   healthPlan?: HealthPlan;
 }
 
-// TODO: migrate to useQuery (appointments page is already migrated)
+const createPlanSchema = z.object({
+  name: z.string().min(2, 'Informe o nome do plano'),
+  provider: z.string().min(2, 'Informe a conveniada'),
+  coveragePercentage: z.number({ message: 'Cobertura inválida' }).min(1, 'Cobertura mínima é 1%').max(100, 'Cobertura máxima é 100%'),
+});
+
+type CreatePlanFormData = z.infer<typeof createPlanSchema>;
+
 export default function HealthPlansPage() {
   const { user } = useAuthStore();
-  const [plans, setPlans] = useState<HealthPlan[]>([]);
-  const [myPlans, setMyPlans] = useState<MyPlan[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [modal, setModal] = useState(false);
 
   const isAdmin = user?.role === 'ADMIN';
+  const isPatient = user?.role === 'PATIENT';
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await api.get<HealthPlan[]>('/health-plans');
-        setPlans(data || []);
-        if (user?.role === 'PATIENT') {
-          const mine = await api.get<MyPlan[]>(`/health-plans/patient/${user.id}`);
-          setMyPlans(mine.data || []);
-        }
-      } catch (e) {
-        setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao carregar planos');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [user]);
+  const plansQuery = useQuery({
+    queryKey: ['health-plans'],
+    queryFn: async () => (await api.get<HealthPlan[]>('/health-plans')).data ?? [],
+  });
 
+  const myPlansQuery = useQuery({
+    queryKey: ['health-plans', 'mine'],
+    queryFn: async () => (await api.get<MyPlan[]>(`/health-plans/patient/${user!.id}`)).data ?? [],
+    enabled: isPatient,
+  });
+
+  const loading = plansQuery.isLoading || (isPatient && myPlansQuery.isLoading);
   if (loading) return <p className="text-gray-500">Carregando...</p>;
 
-  if (user?.role === 'PATIENT') {
+  const plans = plansQuery.data ?? [];
+  const myPlans = myPlansQuery.data ?? [];
+  const error = plansQuery.error ? 'Erro ao carregar planos' : '';
+
+  if (isPatient) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold text-gray-900">Meus Planos de Saúde</h1>
@@ -88,89 +95,99 @@ export default function HealthPlansPage() {
       </div>
       {error && <p className="text-red-500 text-sm">{error}</p>}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {/* TODO: wrap table in overflow-x-auto for small screens */}
-        {plans.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">Nenhum plano cadastrado</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-500">
-              <tr>
-                <th className="text-left px-4 py-3">Nome</th>
-                <th className="text-left px-4 py-3">Conveniada</th>
-                <th className="text-left px-4 py-3">Cobertura</th>
-                <th className="text-left px-4 py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {plans.map((p) => (
-                <tr key={p.id}>
-                  <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
-                  <td className="px-4 py-3 text-gray-600">{p.provider}</td>
-                  <td className="px-4 py-3 text-gray-600">{p.coveragePercentage}%</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${p.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                      {p.isActive ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </td>
+        <div className="overflow-x-auto">
+          {plans.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">Nenhum plano cadastrado</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500">
+                <tr>
+                  <th className="text-left px-4 py-3">Nome</th>
+                  <th className="text-left px-4 py-3">Conveniada</th>
+                  <th className="text-left px-4 py-3">Cobertura</th>
+                  <th className="text-left px-4 py-3">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {plans.map((p) => (
+                  <tr key={p.id}>
+                    <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
+                    <td className="px-4 py-3 text-gray-600">{p.provider}</td>
+                    <td className="px-4 py-3 text-gray-600">{p.coveragePercentage}%</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${p.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {p.isActive ? 'Ativo' : 'Inativo'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
-      {modal && isAdmin && <CreatePlanModal onClose={() => setModal(false)} onCreated={async () => {
-        const { data } = await api.get<HealthPlan[]>('/health-plans');
-        setPlans(data || []);
-      }} />}
+      {modal && isAdmin && <CreatePlanModal onClose={() => setModal(false)} />}
     </div>
   );
 }
 
-function CreatePlanModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => Promise<void> }) {
-  const [name, setName] = useState('');
-  const [provider, setProvider] = useState('');
-  const [coveragePercentage, setCoveragePercentage] = useState<number>(80);
+function CreatePlanModal({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  async function create() {
-    setError('');
-    setLoading(true);
-    try {
-      await api.post('/health-plans', { name, provider, coveragePercentage });
-      await onCreated();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<CreatePlanFormData>({
+    resolver: zodResolver(createPlanSchema),
+    mode: 'onTouched',
+    defaultValues: { coveragePercentage: 80 },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: CreatePlanFormData) => {
+      await api.post('/health-plans', { name: data.name, provider: data.provider, coveragePercentage: data.coveragePercentage });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['health-plans'] });
       onClose();
-    } catch (e) {
-      setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao criar plano');
-    } finally {
-      setLoading(false);
-    }
-  }
+    },
+    onError: (e) => setError(apiErrorMessage(e)),
+  });
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-3" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-gray-900">Novo Plano de Saúde</h2>
-        {/* TODO: add client-side validation — name and provider are required but modal allows empty submit */}
-        <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Nome do plano" value={name} onChange={(e) => setName(e.target.value)} />
-        <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Conveniada" value={provider} onChange={(e) => setProvider(e.target.value)} />
-        <input
-          className="w-full border rounded-lg px-3 py-2 text-sm"
-          placeholder="Cobertura (%)"
-          type="number"
-          min={0}
-          max={100}
-          value={coveragePercentage}
-          onChange={(e) => setCoveragePercentage(Number(e.target.value))}
-        />
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-        <div className="flex gap-2 justify-end">
-          {/* TODO: add confirmation dialog before creating plan and optimistic update for instant feedback */}
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
-          <button onClick={create} disabled={loading} className="bg-primary-600 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
-            {loading ? 'Criando...' : 'Criar'}
-          </button>
-        </div>
+        <form onSubmit={handleSubmit((data) => createMutation.mutate(data))} className="space-y-3">
+          <div>
+            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Nome do plano" {...register('name')} />
+            {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
+          </div>
+          <div>
+            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Conveniada" {...register('provider')} />
+            {errors.provider && <p className="text-red-500 text-xs mt-1">{errors.provider.message}</p>}
+          </div>
+          <div>
+            <input
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+              placeholder="Cobertura (%)"
+              type="number"
+              min={0}
+              max={100}
+              {...register('coveragePercentage', { valueAsNumber: true })}
+            />
+            {errors.coveragePercentage && <p className="text-red-500 text-xs mt-1">{errors.coveragePercentage.message}</p>}
+          </div>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <div className="flex gap-2 justify-end">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+            <button type="submit" disabled={createMutation.isPending} className="bg-primary-600 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
+              {createMutation.isPending ? 'Criando...' : 'Criar'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

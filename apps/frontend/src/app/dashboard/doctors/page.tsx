@@ -1,7 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { api, apiErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth.store';
 
 interface Specialty {
@@ -22,37 +26,40 @@ function dayName(d: number) {
   return ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][d] ?? d;
 }
 
-// TODO: migrate to useQuery (appointments page is already migrated)
+const createDoctorSchema = z.object({
+  userId: z.string().min(1, 'Selecione um usuário com perfil DOCTOR'),
+  licenseNumber: z.string().min(3, 'Informe o número do CRM'),
+  specialtyId: z.string().min(1, 'Selecione uma especialidade'),
+  bio: z.string().optional(),
+});
+
+type CreateDoctorFormData = z.infer<typeof createDoctorSchema>;
+
 export default function DoctorsPage() {
   const { user } = useAuthStore();
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [specialties, setSpecialties] = useState<Specialty[]>([]);
-  const [users, setUsers] = useState<{ id: string; name: string; role: string }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [modal, setModal] = useState(false);
 
-  async function load() {
-    const [docRes, specRes] = await Promise.all([api.get<Doctor[]>('/doctors'), api.get<Specialty[]>('/specialties')]);
-    setDoctors(docRes.data);
-    setSpecialties(specRes.data);
-  }
+  const doctorsQuery = useQuery({
+    queryKey: ['doctors'],
+    queryFn: async () => (await api.get<Doctor[]>('/doctors')).data ?? [],
+  });
+  const specialtiesQuery = useQuery({
+    queryKey: ['specialties'],
+    queryFn: async () => (await api.get<Specialty[]>('/specialties')).data ?? [],
+  });
+  const doctorUsersQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => (await api.get<{ id: string; name: string; role: string }[]>('/users')).data ?? [],
+    select: (data) => data.filter((u) => u.role === 'DOCTOR'),
+  });
 
-  useEffect(() => {
-    (async () => {
-      try {
-        await load();
-        const us = await api.get<{ id: string; name: string; role: string }[]>('/users').catch(() => null);
-        if (us) setUsers((us.data || []).filter((u) => u.role === 'DOCTOR'));
-      } catch (e) {
-        setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao carregar médicos');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
+  const loading = doctorsQuery.isLoading || specialtiesQuery.isLoading || doctorUsersQuery.isLoading;
   if (loading) return <p className="text-gray-500">Carregando...</p>;
+
+  const doctors = doctorsQuery.data ?? [];
+  const specialties = specialtiesQuery.data ?? [];
+  const users = doctorUsersQuery.data ?? [];
+  const error = doctorsQuery.error || specialtiesQuery.error ? 'Erro ao carregar médicos' : '';
 
   return (
     <div className="space-y-6">
@@ -91,61 +98,73 @@ export default function DoctorsPage() {
           ))}
         </div>
       )}
-      {modal && user?.role === 'ADMIN' && <CreateDoctorModal onClose={() => setModal(false)} onCreated={load} specialties={specialties} users={users} />}
+      {modal && user?.role === 'ADMIN' && (
+        <CreateDoctorModal onClose={() => setModal(false)} specialties={specialties} users={users} />
+      )}
     </div>
   );
 }
 
-function CreateDoctorModal({ onClose, onCreated, specialties, users }: {
+function CreateDoctorModal({ onClose, specialties, users }: {
   onClose: () => void;
-  onCreated: () => Promise<void>;
   specialties: Specialty[];
   users: { id: string; name: string }[];
 }) {
-  const [userId, setUserId] = useState('');
-  const [licenseNumber, setLicenseNumber] = useState('');
-  const [specialtyId, setSpecialtyId] = useState('');
-  const [bio, setBio] = useState('');
+  const queryClient = useQueryClient();
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  async function create() {
-    setError('');
-    setLoading(true);
-    try {
-      await api.post('/doctors', { userId, licenseNumber, specialtyId, bio: bio || undefined });
-      await onCreated();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<CreateDoctorFormData>({
+    resolver: zodResolver(createDoctorSchema),
+    mode: 'onTouched',
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: CreateDoctorFormData) => {
+      await api.post('/doctors', { userId: data.userId, licenseNumber: data.licenseNumber, specialtyId: data.specialtyId, bio: data.bio || undefined });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['doctors'] });
       onClose();
-    } catch (e) {
-      // TODO: map backend errors (e.g. "user already has doctor profile") to user-friendly PT messages
-      setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao criar médico');
-    } finally {
-      setLoading(false);
-    }
-  }
+    },
+    onError: (e) => setError(apiErrorMessage(e)),
+  });
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-3" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-gray-900">Novo Médico</h2>
-        <select className="w-full border rounded-lg px-3 py-2 text-sm" value={userId} onChange={(e) => setUserId(e.target.value)}>
-          <option value="">Selecionar usuário (perfil DOCTOR)</option>
-          {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
-        <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Nº CRM" value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} />
-        <select className="w-full border rounded-lg px-3 py-2 text-sm" value={specialtyId} onChange={(e) => setSpecialtyId(e.target.value)}>
-          <option value="">Selecionar especialidade</option>
-          {specialties.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <textarea className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Bio (opcional)" value={bio} onChange={(e) => setBio(e.target.value)} />
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-        <div className="flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
-          {/* TODO: also disable when userId, licenseNumber or specialtyId are empty to prevent unnecessary 400 */}
-          <button onClick={create} disabled={loading} className="bg-primary-600 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
-            {loading ? 'Criando...' : 'Criar'}
-          </button>
-        </div>
+        <form onSubmit={handleSubmit((data) => createMutation.mutate(data))} className="space-y-3">
+          <div>
+            <select className="w-full border rounded-lg px-3 py-2 text-sm" {...register('userId')}>
+              <option value="">Selecionar usuário (perfil DOCTOR)</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+            {errors.userId && <p className="text-red-500 text-xs mt-1">{errors.userId.message}</p>}
+          </div>
+          <div>
+            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Nº CRM" {...register('licenseNumber')} />
+            {errors.licenseNumber && <p className="text-red-500 text-xs mt-1">{errors.licenseNumber.message}</p>}
+          </div>
+          <div>
+            <select className="w-full border rounded-lg px-3 py-2 text-sm" {...register('specialtyId')}>
+              <option value="">Selecionar especialidade</option>
+              {specialties.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            {errors.specialtyId && <p className="text-red-500 text-xs mt-1">{errors.specialtyId.message}</p>}
+          </div>
+          <textarea className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Bio (opcional)" {...register('bio')} />
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <div className="flex gap-2 justify-end">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+            <button type="submit" disabled={createMutation.isPending} className="bg-primary-600 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
+              {createMutation.isPending ? 'Criando...' : 'Criar'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -16,61 +17,56 @@ interface Record {
   createdAt: string;
 }
 
-// TODO: migrate to useQuery (appointments page is already migrated)
 export default function RecordsPage() {
   const { user } = useAuthStore();
-  const [records, setRecords] = useState<Record[]>([]);
-  const [patients, setPatients] = useState<{ id: string; name: string }[]>([]);
   const [selectedPatient, setSelectedPatient] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
-  useEffect(() => {
-    (async () => {
-      try {
-        if (user?.role === 'PATIENT') {
-          const { data } = await api.get<Record[]>(`/medical-records?patientId=${user.id}`);
-          setRecords(data || []);
-        } else {
-          const { data } = await api.get<{ id: string; name: string; role: string }[]>('/users');
-          setPatients((data || []).filter((u) => u.role === 'PATIENT'));
-        }
-      } catch (e) {
-        setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao carregar prontuários');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [user]);
+  const isPatient = user?.role === 'PATIENT';
+  const activePatientId = isPatient ? user!.id : selectedPatient;
 
-  async function loadFor(patientId: string) {
-    setSelectedPatient(patientId);
-    setError('');
-    setRecords([]);
-    if (!patientId) return;
-    try {
-      const { data } = await api.get<Record[]>(`/medical-records?patientId=${patientId}`);
-      setRecords(data || []);
-    } catch (e) {
-      setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao carregar prontuários');
-    }
-  }
+  const patientsQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => (await api.get<{ id: string; name: string; role: string }[]>('/users')).data ?? [],
+    enabled: !isPatient,
+    select: (data) => data.filter((u) => u.role === 'PATIENT'),
+  });
 
+  const recordsQuery = useQuery({
+    queryKey: ['medical-records', activePatientId],
+    queryFn: async () => {
+      if (!activePatientId) return [] as Record[];
+      const { data } = await api.get<Record[]>(`/medical-records?patientId=${activePatientId}`);
+      return data ?? [];
+    },
+    enabled: !!activePatientId,
+  });
+
+  const loading = isPatient ? recordsQuery.isLoading : patientsQuery.isLoading;
   if (loading) return <p className="text-gray-500">Carregando...</p>;
+
+  const patients = patientsQuery.data ?? [];
+  const records = recordsQuery.data ?? [];
+  const error = recordsQuery.error ? 'Erro ao carregar prontuários' : '';
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">
-        {user?.role === 'PATIENT' ? 'Meu Prontuário' : 'Prontuários'}
+        {isPatient ? 'Meu Prontuário' : 'Prontuários'}
       </h1>
-      {user?.role !== 'PATIENT' && (
-        <select className="w-full max-w-sm border rounded-lg px-3 py-2 text-sm" value={selectedPatient} onChange={(e) => loadFor(e.target.value)}>
+      {!isPatient && (
+        <select
+          className="w-full max-w-sm border rounded-lg px-3 py-2 text-sm"
+          value={selectedPatient}
+          onChange={(e) => setSelectedPatient(e.target.value)}
+        >
           <option value="">Selecionar paciente</option>
           {patients.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       )}
       {error && <p className="text-red-500 text-sm">{error}</p>}
-      {records.length === 0 ? (
+      {recordsQuery.isPending && selectedPatient ? (
+        <p className="text-gray-500">Carregando prontuários...</p>
+      ) : records.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <p className="text-gray-500 text-center py-8">Nenhum prontuário encontrado</p>
         </div>
