@@ -13,3 +13,5 @@ out/
 *.tsbuildinfo
 .pg/
 .logs/
+.vercel
+.env*
