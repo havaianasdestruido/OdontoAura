@@ -1,6 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
+overrides:
+  postcss: "^8.5.23"
 allowBuilds:
   "@parcel/watcher": true
   "@prisma/client": true
@@ -10,3 +12,4 @@ allowBuilds:
   "unrs-resolver": true
   "@nestjs/core": true
   "bcrypt": true
+  "esbuild": true
