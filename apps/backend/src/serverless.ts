@@ -14,7 +14,19 @@ async function getApp(): Promise<NestFastifyApplication> {
   return appPromise;
 }
 
-export default async function handler(req: any, res: any) {
+interface ServerlessRequest {
+  method?: string;
+  url?: string;
+  headers?: Record<string, string | string[] | undefined>;
+  body?: unknown;
+}
+
+interface ServerlessResponse {
+  writeHead: (statusCode: number, headers: Record<string, string | number | string[]>) => void;
+  end: (body: string) => void;
+}
+
+export default async function handler(req: ServerlessRequest, res: ServerlessResponse) {
   try {
     const app = await getApp();
     const fastify = app.getHttpAdapter().getInstance();
@@ -29,7 +41,7 @@ export default async function handler(req: any, res: any) {
             : undefined;
 
     const result = await fastify.inject({
-      method: req.method as any,
+      method: (req.method || 'GET') as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS',
       url: req.url || '/',
       headers: req.headers || {},
       payload,

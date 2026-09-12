@@ -97,6 +97,7 @@ describe('AppointmentsPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Nova Consulta/ }));
 
+    await screen.findByRole('option', { name: /CRM-123/ });
     const combos = screen.getAllByRole('combobox');
     fireEvent.change(combos[0], { target: { value: 'pat_1' } });
     fireEvent.change(combos[1], { target: { value: 'doc_1' } });

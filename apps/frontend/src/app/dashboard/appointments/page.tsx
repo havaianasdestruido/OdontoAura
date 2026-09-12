@@ -48,19 +48,20 @@ export default function AppointmentsPage() {
     queryKey: ['appointments'],
     queryFn: async () => (await api.get<Appt[]>('/appointments')).data ?? [],
   });
-  // TODO: set enabled: showForm on doctors/specialties/patientOptions queries to avoid refetching when form is closed
   const doctorsQuery = useQuery({
     queryKey: ['doctors'],
     queryFn: async () => (await api.get<Doctor[]>('/doctors')).data ?? [],
+    enabled: showForm,
   });
   const specialtiesQuery = useQuery({
     queryKey: ['specialties'],
     queryFn: async () => (await api.get<Specialty[]>('/specialties')).data ?? [],
+    enabled: showForm,
   });
   const patientOptionsQuery = useQuery({
     queryKey: ['users'],
     queryFn: async () => (await api.get<{ id: string; name: string; role: string }[]>('/users')).data ?? [],
-    enabled: isStaff,
+    enabled: isStaff && showForm,
     select: (data) => data.filter((x) => x.role === 'PATIENT'),
   });
 
@@ -71,7 +72,7 @@ export default function AppointmentsPage() {
   const loadError = appointmentsQuery.error || doctorsQuery.error || specialtiesQuery.error
     ? 'Erro ao carregar consultas'
     : '';
-  const loading = appointmentsQuery.isPending || doctorsQuery.isPending || specialtiesQuery.isPending || (isStaff && patientOptionsQuery.isPending);
+  const loading = appointmentsQuery.isLoading || doctorsQuery.isLoading || specialtiesQuery.isLoading || (isStaff && patientOptionsQuery.isLoading);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -149,8 +150,9 @@ export default function AppointmentsPage() {
             </select>
             <input className="border rounded-lg px-3 py-2 text-sm sm:col-span-2" placeholder="Observações (opcional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
-          {/* TODO: add disabled={createMutation.isPending} and loading text to prevent double-submit */}
-          <button onClick={create} className="bg-primary-600 text-white text-sm font-medium px-4 py-2 rounded-lg">Confirmar agendamento</button>
+          <button onClick={create} disabled={createMutation.isPending} className="bg-primary-600 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed">
+            {createMutation.isPending ? 'Agendando...' : 'Confirmar agendamento'}
+          </button>
         </div>
       )}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

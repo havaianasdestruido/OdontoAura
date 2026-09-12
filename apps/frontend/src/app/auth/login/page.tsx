@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, apiErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth.store';
 
 const loginSchema = z.object({
@@ -35,15 +35,12 @@ export default function LoginPage() {
       setAuth(user, access_token);
       router.push('/dashboard');
     } catch (err) {
-      // TODO: map 401 "Invalid credentials" to localized PT message ("Email ou senha incorretos")
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(message || 'Erro ao fazer login');
+      setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }
   }
 
-  // TODO: add loading.tsx and error.tsx route boundaries for /auth/login segment
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50 px-4">
       <div className="w-full max-w-md">

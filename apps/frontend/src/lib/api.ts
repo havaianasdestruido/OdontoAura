@@ -1,9 +1,9 @@
-// TODO: replace axios with native fetch to save ~13KB client bundle
 import axios from 'axios';
 
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://odonto-aura-backend.vercel.app/api',
   headers: { 'Content-Type': 'application/json' },
+  timeout: 15000,
 });
 
 api.interceptors.request.use((config) => {
@@ -16,12 +16,6 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  // TODO: add centralized error mapping — distinguish network failures (no response) from API errors (4xx/5xx) so callers get a typed error instead of raw AxiosError
-  // TODO: add request timeout via AbortController or axios timeout config (e.g. 15 s) to prevent hanging requests on slow/unreachable backends
-  // TODO: add retry with exponential backoff on transient failures (5xx, network errors) — skip on 4xx client errors
-  // TODO: add centralized error mapping — distinguish network failures (no response) from API errors (4xx/5xx) so callers can handle them uniformly instead of catching raw AxiosError
-  // TODO: add request timeout via AbortController or axios timeout option — requests can hang indefinitely on slow/unreachable backends
-  // TODO: add retry with exponential backoff for transient failures (5xx, network) — skip on 4xx client errors
   (error) => {
     if (error.response?.status === 401 && typeof window !== 'undefined') {
       localStorage.removeItem('token');
@@ -30,3 +24,15 @@ api.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+export function apiErrorMessage(err: unknown): string {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  const serverMessage = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+  if (status === 409) return 'Já existe uma conta com este email';
+  if (status === 401) return 'Email ou senha incorretos';
+  if (serverMessage) {
+    return Array.isArray(serverMessage) ? serverMessage[0] : serverMessage;
+  }
+  if ((err as { code?: string })?.code === 'ECONNABORTED') return 'O servidor demorou para responder; tente novamente';
+  return 'Não foi possível conectar ao servidor';
+}

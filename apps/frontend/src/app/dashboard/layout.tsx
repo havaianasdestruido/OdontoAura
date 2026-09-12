@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth.store';
+import { queryClient } from '@/lib/query-client';
 import { LogOut, Calendar, Users, Stethoscope, Settings, ClipboardList, Shield, type LucideIcon } from 'lucide-react';
 
 const roleNavItems: Record<string, { label: string; href: string; icon: LucideIcon }[]> = {
@@ -61,7 +62,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [hydrated, user, router]);
 
   // TODO: add loading spinner during hydration instead of rendering blank screen
-  if (!hydrated || !user) return null;
+  if (!hydrated || !user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   const navItems = roleNavItems[user.role] || roleNavItems.PATIENT;
 
@@ -104,8 +111,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               {roleLabels[user.role]}
             </span>
             <span className="text-sm text-gray-700 hidden sm:block">{user.name}</span>
-            {/* TODO: clear react-query cache on logout so stale data does not leak into next session */}
-            <button onClick={() => { logout(); router.push('/auth/login'); }} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700" title="Sair">
+            <button onClick={() => { queryClient.clear(); logout(); router.push('/auth/login'); }} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700" title="Sair">
               <LogOut className="w-5 h-5" />
             </button>
           </div>
