@@ -65,11 +65,20 @@ pnpm --filter @odontoaura/frontend dev
 
 ### URLs de Desenvolvimento
 
-| Serviço | URL |
+| Service | URL |
 | :--- | :--- |
 | Frontend | http://localhost:3000 |
 | Backend API | http://localhost:3001/api |
 | Swagger Docs | http://localhost:3001/api/docs |
+
+### Produção (Vercel)
+
+| Service | URL |
+| :--- | :--- |
+| Frontend | https://frontend-five-blush-84.vercel.app |
+| Backend API | https://backend-eta-pink.vercel.app/api |
+| Health Check | https://backend-eta-pink.vercel.app/api/health |
+| Swagger Docs | https://backend-eta-pink.vercel.app/api/docs |
 
 ## Endpoints da API
 
