@@ -6,8 +6,8 @@ import { AuthUser } from '../common/auth-user';
 
 export interface DoctorProfile {
   id: string;
-  userId: string;
-  licenseNumber: string;
+  userId?: string;
+  licenseNumber?: string;
   bio?: string;
   specialties: { id: string; name: string }[];
   availability: AvailabilitySlot[];
@@ -20,6 +20,8 @@ export interface AvailabilitySlot {
   startTime: string;
   endTime: string;
 }
+
+const SLOT_INTERVAL_MINUTES = 5;
 
 @Injectable()
 export class DoctorsService {
@@ -35,16 +37,16 @@ export class DoctorsService {
     const specialty = await this.prisma.specialty.findUnique({ where: { id: dto.specialtyId } });
     if (!specialty) throw new NotFoundException(`Specialty ${dto.specialtyId} not found`);
 
-    // TODO: trim and normalize licenseNumber before uniqueness check — whitespace/casing causes false conflicts
-    const existingLicense = await this.prisma.doctorProfile.findUnique({ where: { licenseNumber: dto.licenseNumber } });
-    if (existingLicense) throw new ConflictException(`License ${dto.licenseNumber} is already in use`);
+    const licenseNumber = dto.licenseNumber.trim().toUpperCase();
+    const existingLicense = await this.prisma.doctorProfile.findUnique({ where: { licenseNumber } });
+    if (existingLicense) throw new ConflictException(`License ${licenseNumber} is already in use`);
 
     let doctor;
     try {
       doctor = await this.prisma.doctorProfile.create({
         data: {
           userId: dto.userId,
-          licenseNumber: dto.licenseNumber,
+          licenseNumber,
           bio: dto.bio,
           specialtyId: dto.specialtyId,
         },
@@ -52,30 +54,32 @@ export class DoctorsService {
       });
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new ConflictException(`Doctor profile already exists for user ${dto.userId} or license ${dto.licenseNumber}`);
+        throw new ConflictException(`Doctor profile already exists for user ${dto.userId} or license ${licenseNumber}`);
       }
       throw e;
     }
     return this.toResult(doctor, []);
   }
 
-  async findAll(): Promise<DoctorProfile[]> {
-    // TODO: add pagination (take/skip) to prevent unbounded result sets
+  async findAll(actor?: AuthUser, skip = 0, take = 500): Promise<DoctorProfile[]> {
     const doctors = await this.prisma.doctorProfile.findMany({
       include: { specialty: true, availabilitySlots: true },
       orderBy: { createdAt: 'asc' },
+      skip,
+      take,
     });
-    return doctors.map(d => this.toResult(d, d.availabilitySlots));
+    const results = doctors.map(d => this.toResult(d, d.availabilitySlots));
+    return this.sanitizeForRole(results, actor);
   }
 
-  // TODO: scope findOne by ownership — any auth'd user can read any doctor profile incl. licenseNumber
-  async findOne(id: string): Promise<DoctorProfile> {
+  async findOne(id: string, actor?: AuthUser): Promise<DoctorProfile> {
     const doctor = await this.prisma.doctorProfile.findUnique({
       where: { id },
       include: { specialty: true, availabilitySlots: true },
     });
     if (!doctor) throw new NotFoundException(`Doctor ${id} not found`);
-    return this.toResult(doctor, doctor.availabilitySlots);
+    const [result] = this.sanitizeForRole([this.toResult(doctor, doctor.availabilitySlots)], actor);
+    return result;
   }
 
   async findByUser(userId: string): Promise<DoctorProfile | undefined> {
@@ -125,6 +129,7 @@ export class DoctorsService {
     if (slot.startTime >= slot.endTime) {
       throw new BadRequestException('startTime must be before endTime');
     }
+    this.assertSlotInterval(slot.startTime, slot.endTime);
     const overlapping = await this.prisma.availabilitySlot.findFirst({
       where: {
         doctorId,
@@ -139,12 +144,51 @@ export class DoctorsService {
     const created = await this.prisma.availabilitySlot.create({
       data: { doctorId, dayOfWeek: slot.dayOfWeek, startTime: slot.startTime, endTime: slot.endTime },
     });
-    return {
-      id: created.id,
-      dayOfWeek: created.dayOfWeek,
-      startTime: created.startTime,
-      endTime: created.endTime,
-    };
+    return this.toSlot(created);
+  }
+
+  async updateAvailability(
+    doctorId: string,
+    slotId: string,
+    slot: CreateAvailabilityDto,
+    actor: AuthUser,
+  ): Promise<AvailabilitySlot> {
+    const doctor = await this.prisma.doctorProfile.findUnique({ where: { id: doctorId }, select: { userId: true } });
+    if (!doctor) throw new NotFoundException(`Doctor ${doctorId} not found`);
+    if (actor.role === Role.DOCTOR && doctor.userId !== actor.id) {
+      throw new ForbiddenException('A doctor can only manage their own availability');
+    }
+    const existing = await this.prisma.availabilitySlot.findUnique({ where: { id: slotId } });
+    if (!existing) throw new NotFoundException(`Availability slot ${slotId} not found`);
+    if (existing.doctorId !== doctorId) {
+      throw new BadRequestException('Availability slot does not belong to this doctor');
+    }
+    if (slot.dayOfWeek < 0 || slot.dayOfWeek > 6) {
+      throw new BadRequestException('dayOfWeek must be between 0 (Sunday) and 6 (Saturday)');
+    }
+    if (slot.startTime >= slot.endTime) {
+      throw new BadRequestException('startTime must be before endTime');
+    }
+    this.assertSlotInterval(slot.startTime, slot.endTime);
+
+    const overlapping = await this.prisma.availabilitySlot.findFirst({
+      where: {
+        doctorId,
+        id: { not: slotId },
+        dayOfWeek: slot.dayOfWeek,
+        startTime: { lt: slot.endTime },
+        endTime: { gt: slot.startTime },
+      },
+    });
+    if (overlapping) {
+      throw new ConflictException(`Availability already exists for day ${slot.dayOfWeek} ${slot.startTime}-${slot.endTime}`);
+    }
+
+    const updated = await this.prisma.availabilitySlot.update({
+      where: { id: slotId },
+      data: { dayOfWeek: slot.dayOfWeek, startTime: slot.startTime, endTime: slot.endTime },
+    });
+    return this.toSlot(updated);
   }
 
   async getAvailability(doctorId: string): Promise<AvailabilitySlot[]> {
@@ -154,19 +198,65 @@ export class DoctorsService {
       where: { doctorId },
       orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
     });
-    return slots.map(s => ({
-      id: s.id,
-      dayOfWeek: s.dayOfWeek,
-      startTime: s.startTime,
-      endTime: s.endTime,
-    }));
+    return slots.map(this.toSlot);
   }
 
-  // TODO: remove() does hard delete — will throw FK constraint from appointments; consider soft-delete
+  async removeAvailability(doctorId: string, slotId: string, actor: AuthUser): Promise<void> {
+    const doctor = await this.prisma.doctorProfile.findUnique({ where: { id: doctorId }, select: { userId: true } });
+    if (!doctor) throw new NotFoundException(`Doctor ${doctorId} not found`);
+    if (actor.role === Role.DOCTOR && doctor.userId !== actor.id) {
+      throw new ForbiddenException('A doctor can only manage their own availability');
+    }
+    const existing = await this.prisma.availabilitySlot.findUnique({ where: { id: slotId } });
+    if (!existing) throw new NotFoundException(`Availability slot ${slotId} not found`);
+    if (existing.doctorId !== doctorId) {
+      throw new BadRequestException('Availability slot does not belong to this doctor');
+    }
+    await this.prisma.availabilitySlot.delete({ where: { id: slotId } });
+  }
+
   async remove(id: string): Promise<void> {
     const doctor = await this.prisma.doctorProfile.findUnique({ where: { id } });
     if (!doctor) throw new NotFoundException(`Doctor ${id} not found`);
-    await this.prisma.doctorProfile.delete({ where: { id } });
+    try {
+      await this.prisma.doctorProfile.delete({ where: { id } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+        throw new ConflictException('Doctor has appointments or medical records and cannot be deleted; deactivate the user instead');
+      }
+      throw e;
+    }
+  }
+
+  private assertSlotInterval(startTime: string, endTime: string) {
+    for (const time of [startTime, endTime]) {
+      const minutes = Number(time.slice(3));
+      if (minutes % SLOT_INTERVAL_MINUTES !== 0) {
+        throw new BadRequestException(`Times must be on a ${SLOT_INTERVAL_MINUTES}-minute grid`);
+      }
+    }
+  }
+
+  private sanitizeForRole(profiles: DoctorProfile[], actor?: AuthUser): DoctorProfile[] {
+    if (!actor || actor.role === Role.ADMIN || actor.role === Role.EMPLOYEE || actor.role === Role.DOCTOR) {
+      return profiles;
+    }
+    return profiles.map((profile) => ({
+      id: profile.id,
+      bio: profile.bio,
+      specialties: profile.specialties,
+      availability: profile.availability,
+      createdAt: profile.createdAt,
+    }));
+  }
+
+  private toSlot(slot: { id: string; dayOfWeek: number; startTime: string; endTime: string }): AvailabilitySlot {
+    return {
+      id: slot.id,
+      dayOfWeek: slot.dayOfWeek,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+    };
   }
 
   private toResult(
@@ -179,12 +269,7 @@ export class DoctorsService {
       licenseNumber: doctor.licenseNumber,
       bio: doctor.bio ?? undefined,
       specialties: [{ id: doctor.specialty.id, name: doctor.specialty.name }],
-      availability: slots.map(s => ({
-        id: s.id,
-        dayOfWeek: s.dayOfWeek,
-        startTime: s.startTime,
-        endTime: s.endTime,
-      })),
+      availability: slots.map(this.toSlot),
       createdAt: doctor.createdAt.toISOString(),
     };
   }

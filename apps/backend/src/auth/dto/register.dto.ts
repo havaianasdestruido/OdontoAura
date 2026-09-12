@@ -1,9 +1,10 @@
-import { IsEmail, IsString, IsOptional, MinLength, MaxLength } from 'class-validator';
+import { IsEmail, IsString, IsOptional, MinLength, MaxLength, Matches } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterDto {
   @ApiProperty({ example: 'patient@example.com' })
-  // TODO: add @Transform(({ value }) => value?.toLowerCase()) to normalize email before validation
+  @Transform(({ value }) => (typeof value === 'string' ? value.toLowerCase() : value))
   @IsEmail()
   email!: string;
 
@@ -11,7 +12,9 @@ export class RegisterDto {
   @IsString()
   @MinLength(6)
   @MaxLength(72)
-  // TODO: add @Matches(/^(?=.*[A-Z])(?=.*\d)/) to enforce at least one uppercase and one digit
+  @Matches(/^(?=.*[A-Z])(?=.*\d)/, {
+    message: 'password must contain at least one uppercase letter and one digit',
+  })
   password!: string;
 
   @ApiProperty({ example: 'João Silva' })

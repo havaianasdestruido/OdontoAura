@@ -1,4 +1,21 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request, ForbiddenException, ParseEnumPipe, ParseUUIDPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+  ForbiddenException,
+  BadRequestException,
+  ParseEnumPipe,
+  ParseUUIDPipe,
+  DefaultValuePipe,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { UsersService, CreateUserDto, UpdateUserDto } from './users.service';
@@ -24,8 +41,15 @@ export class UsersController {
   @Roles(Role.ADMIN, Role.EMPLOYEE)
   @ApiOperation({ summary: 'List all users (Admin/Employee)' })
   @ApiQuery({ name: 'role', required: false, enum: Role })
-  findAll(@Query('role', new ParseEnumPipe(Role, { optional: true })) role?: Role) {
-    return this.usersService.findAll(role);
+  @ApiQuery({ name: 'skip', required: false, type: Number })
+  @ApiQuery({ name: 'take', required: false, type: Number })
+  findAll(
+    @Request() req: { user: AuthUser },
+    @Query('role', new ParseEnumPipe(Role, { optional: true })) role?: Role,
+    @Query('skip', new DefaultValuePipe(0), ParseIntPipe) skip = 0,
+    @Query('take', new DefaultValuePipe(500), ParseIntPipe) take = 500,
+  ) {
+    return this.usersService.findAll(role, req.user, skip, take);
   }
 
   @Get(':id')
@@ -40,16 +64,39 @@ export class UsersController {
   @Put(':id')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Update user (Admin only)' })
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
-    // TODO: guard against role escalation — reject DTOs that set role=ADMIN unless caller is super-admin
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateUserDto,
+    @Request() req: { user: AuthUser },
+  ) {
+    if (dto.role === Role.ADMIN) {
+      throw new ForbiddenException('Promoting a user to ADMIN is not allowed');
+    }
+    if (dto.role && dto.role !== req.user.role && req.user.role !== Role.ADMIN) {
+      throw new ForbiddenException('You cannot change roles above your own');
+    }
     return this.usersService.update(id, dto);
   }
 
   @Delete(':id')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Delete user (Admin only)' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    // TODO: prevent admin from deleting own account or other admins without confirmation
+  @ApiQuery({ name: 'confirm', required: true, type: Boolean })
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: { user: AuthUser },
+    @Query('confirm') confirm?: string,
+  ) {
+    if (confirm !== 'true') {
+      throw new BadRequestException('Deletion requires confirm=true query parameter');
+    }
+    if (id === req.user.id) {
+      throw new ForbiddenException('You cannot delete your own account');
+    }
+    const target = await this.usersService.findOne(id);
+    if (target.role === Role.ADMIN) {
+      throw new ForbiddenException('Admin accounts cannot be deleted');
+    }
     return this.usersService.remove(id);
   }
 }

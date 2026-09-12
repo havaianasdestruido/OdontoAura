@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -69,13 +70,13 @@ export class AssignPlanDto {
   @IsUUID()
   healthPlanId!: string;
 
-  // TODO: cardNumber has no format validation — add @Matches pattern to enforce expected card format (e.g. alphanumeric with dashes)
   @ApiProperty({ example: 'OURO-12345' })
   @IsString()
-  @MaxLength(60)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9-]{0,59}$/, {
+    message: 'cardNumber must be alphanumeric, optionally containing dashes',
+  })
   cardNumber!: string;
 
-  // TODO: expiryDate should be validated as a future date, not just any ISO8601 string
   @ApiProperty({ example: '2027-12-31T00:00:00.000Z' })
   @IsISO8601()
   expiryDate!: string;

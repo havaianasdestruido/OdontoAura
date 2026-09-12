@@ -52,7 +52,7 @@ export class MedicalRecordsService {
 
   async findByAppointment(appointmentId: string, actor: AuthUser): Promise<MedicalRecord | undefined> {
     const record = await this.prisma.medicalRecord.findUnique({ where: { appointmentId } });
-    if (!record) return undefined;
+    if (!record || record.voidedAt) return undefined;
     this.assertCanView(record, actor);
     return this.toResult(record);
   }
@@ -62,7 +62,7 @@ export class MedicalRecordsService {
       throw new ForbiddenException('You can only view your own medical records');
     }
     const records = await this.prisma.medicalRecord.findMany({
-      where: { patientId },
+      where: { patientId, voidedAt: null },
       orderBy: { createdAt: 'desc' },
     });
     return records.map(this.toResult);
@@ -70,15 +70,16 @@ export class MedicalRecordsService {
 
   async findOne(id: string, actor: AuthUser): Promise<MedicalRecord> {
     const record = await this.getRecord(id);
+    if (record.voidedAt) throw new NotFoundException(`Medical record ${id} not found`);
     this.assertCanView(record, actor);
     return this.toResult(record);
   }
 
-  // TODO: update() allows doctor to change all fields equally — restrict which fields DOCTOR vs ADMIN can modify (e.g. prescription edits may require admin)
   async update(id: string, dto: UpdateMedicalRecordDto, actor: AuthUser): Promise<MedicalRecord> {
     const record = await this.getRecord(id);
-    await this.assertCanEdit(record.appointmentId, actor);
+    if (record.voidedAt) throw new BadRequestException('Cannot edit a voided medical record');
     if (Object.keys(dto).length === 0) throw new BadRequestException('No fields to update');
+    await this.assertCanEdit(record, actor);
     const updated = await this.prisma.medicalRecord.update({
       where: { id },
       data: {
@@ -91,11 +92,13 @@ export class MedicalRecordsService {
     return this.toResult(updated);
   }
 
-  // TODO: remove() has no actor parameter — no service-level authorization check; any module calling this bypasses controller guards
-  // TODO: hard-delete of medical records is irreversible — implement soft-delete or mark-void for audit compliance
-  async remove(id: string): Promise<void> {
-    await this.getRecord(id);
-    await this.prisma.medicalRecord.delete({ where: { id } });
+  async remove(id: string, actor: AuthUser): Promise<void> {
+    if (actor.role !== Role.ADMIN) {
+      throw new ForbiddenException('Only admins can void medical records');
+    }
+    const record = await this.getRecord(id);
+    if (record.voidedAt) throw new BadRequestException('Medical record is already voided');
+    await this.prisma.medicalRecord.update({ where: { id }, data: { voidedAt: new Date() } });
   }
 
   private async getRecord(id: string): Promise<NonNullable<Awaited<ReturnType<PrismaService['medicalRecord']['findUnique']>>>> {
@@ -104,19 +107,24 @@ export class MedicalRecordsService {
     return record;
   }
 
-  private async assertCanEdit(appointmentId: string, actor: AuthUser): Promise<void> {
+  private async assertCanEdit(record: { appointmentId: string }, actor: AuthUser): Promise<void> {
+    const isAdmin = actor.role === Role.ADMIN;
     const [doctorProfile, appointment] = await Promise.all([
       this.prisma.doctorProfile.findUnique({ where: { userId: actor.id } }),
-      this.prisma.appointment.findUnique({ where: { id: appointmentId }, select: { doctorId: true } }),
+      this.prisma.appointment.findUnique({ where: { id: record.appointmentId }, select: { doctorId: true, status: true } }),
     ]);
+    if (!appointment) throw new NotFoundException(`Appointment ${record.appointmentId} not found`);
+    if (isAdmin) return;
+    if (appointment.status === AppointmentStatus.COMPLETED) {
+      throw new ForbiddenException('Completed records are locked; only admins can edit them');
+    }
     if (!doctorProfile) throw new ForbiddenException('Doctor has no profile');
-    if (!appointment) throw new NotFoundException(`Appointment ${appointmentId} not found`);
     if (appointment.doctorId !== doctorProfile.id) {
       throw new ForbiddenException('Only the appointment doctor can edit this medical record');
     }
   }
 
-  private assertCanView(record: { patientId: string; doctorId: string }, actor: AuthUser): void {
+  private assertCanView(record: { patientId: string }, actor: AuthUser): void {
     if (actor.role === Role.ADMIN || actor.role === Role.EMPLOYEE) return;
     if (actor.role === Role.PATIENT) {
       if (record.patientId !== actor.id) throw new ForbiddenException('You can only view your own medical records');
@@ -134,6 +142,7 @@ export class MedicalRecordsService {
     prescription: string | null;
     notes: string | null;
     createdAt: Date;
+    voidedAt: Date | null;
   }): MedicalRecord {
     return {
       id: record.id,

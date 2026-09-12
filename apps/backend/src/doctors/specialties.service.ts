@@ -1,7 +1,7 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
-import { CreateSpecialtyDto } from './dto/specialty.dto';
+import { CreateSpecialtyDto, UpdateSpecialtyDto } from './dto/specialty.dto';
 
 export interface Specialty {
   id: string;
@@ -13,24 +13,38 @@ export interface Specialty {
 export class SpecialtiesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // TODO: trim and normalize name before uniqueness check — casing/whitespace creates silent duplicates
   async create(dto: CreateSpecialtyDto): Promise<Specialty> {
-    const existing = await this.prisma.specialty.findUnique({ where: { name: dto.name } });
-    if (existing) throw new ConflictException(`Specialty "${dto.name}" already exists`);
-    const spec = await this.prisma.specialty.create({ data: { name: dto.name, description: dto.description } });
+    const name = dto.name.trim();
+    const existing = await this.prisma.specialty.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' } },
+    });
+    if (existing) throw new ConflictException(`Specialty "${name}" already exists`);
+    const spec = await this.prisma.specialty.create({ data: { name, description: dto.description } });
     return this.toResult(spec);
   }
 
-  async findAll(): Promise<Specialty[]> {
-    // TODO: add pagination (take/skip) to prevent unbounded result sets
-    const specs = await this.prisma.specialty.findMany({ orderBy: { name: 'asc' } });
+  async findAll(skip = 0, take = 500): Promise<Specialty[]> {
+    const specs = await this.prisma.specialty.findMany({ orderBy: { name: 'asc' }, skip, take });
     return specs.map(this.toResult);
   }
 
-  // TODO: add update() method — specialty name/description immutable after creation
   async findOne(id: string): Promise<Specialty> {
     const spec = await this.prisma.specialty.findUnique({ where: { id } });
     if (!spec) throw new NotFoundException(`Specialty ${id} not found`);
+    return this.toResult(spec);
+  }
+
+  async update(id: string, dto: UpdateSpecialtyDto): Promise<Specialty> {
+    if (Object.keys(dto).length === 0) throw new BadRequestException('Nothing to update');
+    if (dto.name !== undefined) {
+      const name = dto.name.trim();
+      const collision = await this.prisma.specialty.findFirst({
+        where: { id: { not: id }, name: { equals: name, mode: 'insensitive' } },
+      });
+      if (collision) throw new ConflictException(`Specialty "${name}" already exists`);
+      dto.name = name;
+    }
+    const spec = await this.prisma.specialty.update({ where: { id }, data: dto });
     return this.toResult(spec);
   }
 
@@ -56,4 +70,4 @@ export class SpecialtiesService {
   }
 }
 
-export { CreateSpecialtyDto } from './dto/specialty.dto';
+export { CreateSpecialtyDto, UpdateSpecialtyDto } from './dto/specialty.dto';

@@ -8,6 +8,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateDoctorDto {
@@ -15,8 +16,8 @@ export class CreateDoctorDto {
   @IsUUID()
   userId!: string;
 
-  // TODO: add @Transform to trim licenseNumber — whitespace enters DB and causes false uniqueness conflicts
   @ApiProperty({ example: 'CRM-123456' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
   @IsString()
   @MaxLength(30)
   licenseNumber!: string;
@@ -45,6 +46,8 @@ export class UpdateDoctorDto {
   specialtyId?: string;
 }
 
+const SLOT_TIME_PATTERN = /^([01]\d|2[0-3]):(00|05|10|15|20|25|30|35|40|45|50|55)$/;
+
 export class CreateAvailabilityDto {
   @ApiProperty({ example: 1, description: '0=Sunday .. 6=Saturday' })
   @IsInt()
@@ -52,15 +55,14 @@ export class CreateAvailabilityDto {
   @Max(6)
   dayOfWeek!: number;
 
-  // TODO: startTime/endTime allow non-granular times (e.g. 09:07) — enforce configurable slot interval
   @ApiProperty({ example: '08:00' })
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'startTime must be HH:MM' })
+  @Matches(SLOT_TIME_PATTERN, { message: 'startTime must be HH:MM on a 5-minute grid' })
   startTime!: string;
 
   @ApiProperty({ example: '12:00' })
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'endTime must be HH:MM' })
+  @Matches(SLOT_TIME_PATTERN, { message: 'endTime must be HH:MM on a 5-minute grid' })
   endTime!: string;
 }
 

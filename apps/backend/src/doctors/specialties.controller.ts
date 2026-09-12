@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards, ParseUUIDPipe } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, ParseUUIDPipe, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
-import { SpecialtiesService, CreateSpecialtyDto } from './specialties.service';
+import { SpecialtiesService, CreateSpecialtyDto, UpdateSpecialtyDto } from './specialties.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 
@@ -20,16 +20,27 @@ export class SpecialtiesController {
   }
 
   @Get()
+  @ApiQuery({ name: 'skip', required: false, type: Number })
+  @ApiQuery({ name: 'take', required: false, type: Number })
   @ApiOperation({ summary: 'List all specialties' })
-  findAll() {
-    return this.specialtiesService.findAll();
+  findAll(
+    @Query('skip', new DefaultValuePipe(0), ParseIntPipe) skip = 0,
+    @Query('take', new DefaultValuePipe(500), ParseIntPipe) take = 500,
+  ) {
+    return this.specialtiesService.findAll(skip, take);
   }
 
-  // TODO: add PUT endpoint — cannot update existing specialty name or description
   @Get(':id')
   @ApiOperation({ summary: 'Get specialty by ID' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.specialtiesService.findOne(id);
+  }
+
+  @Put(':id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Update specialty (Admin)' })
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateSpecialtyDto) {
+    return this.specialtiesService.update(id, dto);
   }
 
   @Delete(':id')

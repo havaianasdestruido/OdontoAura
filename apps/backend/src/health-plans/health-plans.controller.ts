@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request, ParseBoolPipe, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request, ParseBoolPipe, ParseUUIDPipe, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { HealthPlansService, CreateHealthPlanDto, UpdateHealthPlanDto, AssignPlanDto } from './health-plans.service';
@@ -23,8 +23,14 @@ export class HealthPlansController {
   @Get()
   @ApiOperation({ summary: 'List health plans' })
   @ApiQuery({ name: 'activeOnly', required: false, type: Boolean })
-  findAll(@Query('activeOnly', new ParseBoolPipe({ optional: true })) activeOnly?: boolean) {
-    return this.healthPlansService.findAll(activeOnly);
+  @ApiQuery({ name: 'skip', required: false, type: Number })
+  @ApiQuery({ name: 'take', required: false, type: Number })
+  findAll(
+    @Query('activeOnly', new ParseBoolPipe({ optional: true })) activeOnly?: boolean,
+    @Query('skip', new DefaultValuePipe(0), ParseIntPipe) skip = 0,
+    @Query('take', new DefaultValuePipe(500), ParseIntPipe) take = 500,
+  ) {
+    return this.healthPlansService.findAll(activeOnly, skip, take);
   }
 
   @Get(':id')
@@ -70,11 +76,10 @@ export class HealthPlansController {
     return this.healthPlansService.verifyCoverage(patientId, healthPlanId, req.user);
   }
 
-  // TODO: removePatientPlan() has no actor auth — any EMPLOYEE can remove any patient's plan assignment without ownership check
   @Delete('patient-plan/:id')
-  @Roles(Role.ADMIN, Role.EMPLOYEE)
-  @ApiOperation({ summary: 'Remove patient health plan' })
-  removePatientPlan(@Param('id', ParseUUIDPipe) id: string) {
-    return this.healthPlansService.removePatientPlan(id);
+  @Roles(Role.ADMIN, Role.EMPLOYEE, Role.PATIENT)
+  @ApiOperation({ summary: 'Remove patient health plan (owner or staff)' })
+  removePatientPlan(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthUser }) {
+    return this.healthPlansService.removePatientPlan(id, req.user);
   }
 }

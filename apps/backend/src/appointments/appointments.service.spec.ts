@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
-import { AppointmentsService, AppointmentStatus } from './appointments.service';
+import { AppointmentStatus } from '@prisma/client';
+import { AppointmentsService } from './appointments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '@prisma/client';
 import { AuthUser } from '../common/auth-user';
@@ -20,10 +21,24 @@ interface StoredAppointment {
   updatedAt: Date;
 }
 
-function createPrismaMock() {
+type Fn = ReturnType<typeof vi.fn>;
+
+interface MockPrisma {
+  user: { findUnique: Fn };
+  doctorProfile: { findUnique: Fn };
+  specialty: { findUnique: Fn };
+  medicalRecord: { findUnique: Fn };
+  availabilitySlot: { findMany: Fn };
+  appointment: { findUnique: Fn; findMany: Fn; create: Fn; update: Fn; delete: Fn };
+  $transaction: Fn;
+  _appointments: StoredAppointment[];
+}
+
+function createPrismaMock(): MockPrisma {
   const appointments: StoredAppointment[] = [];
   let counter = 1;
-  return {
+
+  const prismaMock: MockPrisma = {
     user: {
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => ({
         id: where.id,
@@ -42,6 +57,17 @@ function createPrismaMock() {
     medicalRecord: {
       findUnique: vi.fn(async () => null),
     },
+    availabilitySlot: {
+      findMany: vi.fn(async () =>
+        Array.from({ length: 7 }, (_, dayOfWeek) => ({
+          id: `slot_${dayOfWeek}`,
+          doctorId: 'some-doctor',
+          dayOfWeek,
+          startTime: '00:00',
+          endTime: '23:59',
+        })),
+      ),
+    },
     appointment: {
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) =>
         appointments.find(a => a.id === where.id) ?? null,
@@ -50,6 +76,8 @@ function createPrismaMock() {
         async ({
           where,
           orderBy,
+          skip,
+          take,
         }: {
           where?: {
             patientId?: string;
@@ -58,6 +86,8 @@ function createPrismaMock() {
             id?: { not: string };
           };
           orderBy?: { scheduledAt: string };
+          skip?: number;
+          take?: number;
         }): Promise<StoredAppointment[]> => {
           let rows = [...appointments];
           if (where?.patientId) rows = rows.filter(a => a.patientId === where.patientId);
@@ -75,6 +105,7 @@ function createPrismaMock() {
           const excludeId = where?.id?.not;
           if (excludeId) rows = rows.filter(a => a.id !== excludeId);
           if (orderBy?.scheduledAt === 'asc') rows.sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime());
+          if (typeof take === 'number') rows = rows.slice(skip || 0, (skip || 0) + take);
           return rows;
         },
       ),
@@ -102,8 +133,11 @@ function createPrismaMock() {
         return appointments.splice(idx, 1)[0];
       }),
     },
+    $transaction: vi.fn(async (fn: (tx: MockPrisma) => Promise<unknown>) => fn(prismaMock)),
     _appointments: appointments,
   };
+
+  return prismaMock;
 }
 
 describe('AppointmentsService', () => {
@@ -161,7 +195,7 @@ describe('AppointmentsService', () => {
       ).rejects.toThrow('already has an appointment');
     });
 
-it('should reject double booking for the same patient', async () => {
+    it('should reject double booking for the same patient', async () => {
       const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
       await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
       await expect(
@@ -175,21 +209,106 @@ it('should reject double booking for the same patient', async () => {
         service.create({ patientId: 'pat_2', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1')),
       ).rejects.toThrow('only schedule appointments for themselves');
     });
+
+    it('should reject hours with no covering availability slot', async () => {
+      prismaMock.availabilitySlot.findMany.mockResolvedValue([{
+        id: 'slot_workday',
+        doctorId: 'doc_1',
+        dayOfWeek: new Date().getDay(),
+        startTime: '08:00',
+        endTime: '12:00',
+      }]);
+      const offSlot = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      offSlot.setHours(17, 0, 0, 0);
+      await expect(
+        service.create({
+          patientId: 'pat_1',
+          doctorId: 'doc_1',
+          specialtyId: 'spe_1',
+          scheduledAt: offSlot.toISOString(),
+        }, patientActor('pat_1')),
+      ).rejects.toThrow('no availability');
+    });
+
+    it('should accept a naive (timezone-less) timestamp as UTC', async () => {
+      const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19);
+      const result = await service.create(
+        { patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate },
+        patientActor('pat_1'),
+      );
+      expect(result).toHaveProperty('id');
+    });
   });
 
-  // TODO: add tests for findAll and findOne — currently zero coverage
+  describe('findAll and findOne', () => {
+    it('should return all appointments for staff', async () => {
+      const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
+      await service.create({ patientId: 'pat_2', doctorId: 'doc_2', specialtyId: 'spe_2', scheduledAt: futureDate }, patientActor('pat_2'));
+
+      const rows = await service.findAll({}, { id: 'staff_1', email: 's@t.com', name: 'S', role: Role.EMPLOYEE });
+      expect(rows).toHaveLength(2);
+    });
+
+    it('should scope patient views to their own appointments', async () => {
+      const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
+
+      const mine = await service.findAll({}, patientActor('pat_1'));
+      expect(mine).toHaveLength(1);
+    });
+
+    it('should scope doctor views to their own appointments', async () => {
+      const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
+
+      const doctorActor: AuthUser = { id: 'doc_1', email: 'd@t.com', name: 'D', role: Role.DOCTOR };
+      const rows = await service.findAll({}, doctorActor);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].doctorId).toBe('doc_1');
+    });
+
+    it('should filter by status and apply pagination', async () => {
+      const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const a = await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
+      await service.create({ patientId: 'pat_2', doctorId: 'doc_2', specialtyId: 'spe_2', scheduledAt: futureDate }, patientActor('pat_2'));
+      await service.updateStatus(a.id, AppointmentStatus.CONFIRMED, { id: 'staff_1', email: 's@t.com', name: 'S', role: Role.EMPLOYEE });
+
+      const confirmed = await service.findAll({ status: AppointmentStatus.CONFIRMED }, { id: 'staff_1', email: 's@t.com', name: 'S', role: Role.EMPLOYEE });
+      expect(confirmed).toHaveLength(1);
+      expect(confirmed[0].status).toBe(AppointmentStatus.CONFIRMED);
+
+      const page = await service.findAll({}, { id: 'staff_1', email: 's@t.com', name: 'S', role: Role.EMPLOYEE }, 0, 1);
+      expect(page).toHaveLength(1);
+    });
+
+    it('should find an appointment by id for the owner', async () => {
+      const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const apt = await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
+      const found = await service.findOne(apt.id, patientActor('pat_1'));
+      expect(found.id).toBe(apt.id);
+    });
+
+    it('should forbid viewing another patient appointment', async () => {
+      const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const apt = await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
+      await expect(service.findOne(apt.id, patientActor('pat_9'))).rejects.toThrow('cannot view');
+    });
+  });
+
   describe('status transitions', () => {
     it('should follow valid state machine', async () => {
       const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
       const apt = await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
 
-      const confirmed = await service.updateStatus(apt.id, AppointmentStatus.CONFIRMED);
+      const carriedActor = { id: 'staff_1', email: 's@t.com', name: 'S', role: Role.EMPLOYEE };
+      const confirmed = await service.updateStatus(apt.id, AppointmentStatus.CONFIRMED, carriedActor);
       expect(confirmed.status).toBe(AppointmentStatus.CONFIRMED);
 
-      const inProgress = await service.updateStatus(apt.id, AppointmentStatus.IN_PROGRESS);
+      const inProgress = await service.updateStatus(apt.id, AppointmentStatus.IN_PROGRESS, carriedActor);
       expect(inProgress.status).toBe(AppointmentStatus.IN_PROGRESS);
 
-      const completed = await service.updateStatus(apt.id, AppointmentStatus.COMPLETED);
+      const completed = await service.updateStatus(apt.id, AppointmentStatus.COMPLETED, carriedActor);
       expect(completed.status).toBe(AppointmentStatus.COMPLETED);
     });
 
@@ -197,12 +316,10 @@ it('should reject double booking for the same patient', async () => {
       const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
       const apt = await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
 
-      await expect(service.updateStatus(apt.id, AppointmentStatus.COMPLETED)).rejects.toThrow('Cannot transition');
+      await expect(service.updateStatus(apt.id, AppointmentStatus.COMPLETED, patientActor('pat_1'))).rejects.toThrow('Cannot transition');
     });
   });
 
-  // TODO: add tests for remove — guard against deleting in-progress/completed appointments and appointments with linked records
-  // TODO: add tests for cancel-window enforcement — reject cancel when scheduledAt is in the past
   describe('cancel', () => {
     it('should cancel a scheduled appointment as the owner', async () => {
       const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -217,6 +334,53 @@ it('should reject double booking for the same patient', async () => {
       await expect(
         service.cancel(apt.id, { id: 'pat_9', email: 'x@y.com', name: 'X', role: Role.PATIENT }),
       ).rejects.toThrow('only cancel your own');
+    });
+
+    it('should reject cancelling an appointment that already started', async () => {
+      const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const apt = await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
+      prismaMock._appointments[0].scheduledAt = new Date(Date.now() - 60 * 60 * 1000);
+
+      await expect(
+        service.cancel(apt.id, { id: 'pat_1', email: 'p@t.com', name: 'P', role: Role.PATIENT }),
+      ).rejects.toThrow('before its scheduled time');
+    });
+
+    it('should allow admin override with a reason for past appointments', async () => {
+      const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const apt = await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
+      prismaMock._appointments[0].scheduledAt = new Date(Date.now() - 60 * 60 * 1000);
+
+      const cancelled = await service.cancel(
+        apt.id,
+        { id: 'admin_1', email: 'a@t.com', name: 'A', role: Role.ADMIN },
+        'Desistiu no balcão',
+      );
+      expect(cancelled.status).toBe(AppointmentStatus.CANCELLED);
+    });
+  });
+
+  describe('remove', () => {
+    it('should delete a scheduled appointment', async () => {
+      const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const apt = await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
+      await expect(service.remove(apt.id)).resolves.toBeUndefined();
+    });
+
+    it('should reject deleting an in-progress or completed appointment', async () => {
+      const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const apt = await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
+      const staff = { id: 'staff_1', email: 's@t.com', name: 'S', role: Role.EMPLOYEE };
+      await service.updateStatus(apt.id, AppointmentStatus.CONFIRMED, staff);
+      await service.updateStatus(apt.id, AppointmentStatus.IN_PROGRESS, staff);
+      await expect(service.remove(apt.id)).rejects.toThrow('in progress or completed');
+    });
+
+    it('should reject deleting an appointment with a linked medical record', async () => {
+      const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const apt = await service.create({ patientId: 'pat_1', doctorId: 'doc_1', specialtyId: 'spe_1', scheduledAt: futureDate }, patientActor('pat_1'));
+      prismaMock.medicalRecord.findUnique.mockResolvedValue({ id: 'mr_1' });
+      await expect(service.remove(apt.id)).rejects.toThrow('linked medical record');
     });
   });
 });

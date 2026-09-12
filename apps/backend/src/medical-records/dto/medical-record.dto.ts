@@ -6,18 +6,15 @@ export class CreateMedicalRecordDto {
   @IsUUID()
   appointmentId!: string;
 
-  // TODO: anamnesis and diagnosis should be required (@IsString without @IsOptional) for create
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty()
   @IsString()
   @MaxLength(4000)
-  anamnesis?: string;
+  anamnesis!: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty()
   @IsString()
   @MaxLength(4000)
-  diagnosis?: string;
+  diagnosis!: string;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -30,6 +30,13 @@ const VALID_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
 
 const BLOCKING_STATUSES = [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS];
 
+function parseScheduledAt(input: string): Date {
+  if (!/Z$|[+-]\d{2}:\d{2}$/.test(input)) {
+    return new Date(`${input}Z`);
+  }
+  return new Date(input);
+}
+
 @Injectable()
 export class AppointmentsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -47,37 +54,42 @@ export class AppointmentsService {
     if (!doctor) throw new NotFoundException(`Doctor ${dto.doctorId} not found`);
     if (!specialty) throw new NotFoundException(`Specialty ${dto.specialtyId} not found`);
 
-    // TODO: normalize scheduledAt to UTC — frontend local datetime causes DST/timezone drift
-    const scheduledDate = new Date(dto.scheduledAt);
+    const scheduledDate = parseScheduledAt(dto.scheduledAt);
     if (Number.isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
       throw new BadRequestException('Appointment must be scheduled for a future date');
     }
     const duration = dto.durationMinutes ?? 30;
+    await this.assertDoctorHasAvailability(dto.doctorId, scheduledDate, duration);
 
-    // TODO: validate against doctor availability_slots — appointment could be outside available hours
-    const doctorConflict = await this.findOverlap({ doctorId: dto.doctorId }, scheduledDate, duration);
-    if (doctorConflict) throw new ConflictException('Doctor already has an appointment at this time');
+    return this.prisma.$transaction(async (tx) => {
+      const doctorConflict = await this.findOverlap(tx.appointment, { doctorId: dto.doctorId }, scheduledDate, duration);
+      if (doctorConflict) throw new ConflictException('Doctor already has an appointment at this time');
 
-    const patientConflict = await this.findOverlap({ patientId: dto.patientId }, scheduledDate, duration);
-    if (patientConflict) throw new ConflictException('Patient already has an appointment at this time');
+      const patientConflict = await this.findOverlap(tx.appointment, { patientId: dto.patientId }, scheduledDate, duration);
+      if (patientConflict) throw new ConflictException('Patient already has an appointment at this time');
 
-    // TODO: wrap conflict checks + create in a transaction to prevent race-condition double-booking
-    return this.prisma.appointment
-      .create({
-        data: {
-          patientId: dto.patientId,
-          doctorId: dto.doctorId,
-          specialtyId: dto.specialtyId,
-          scheduledAt: scheduledDate,
-          durationMinutes: duration,
-          status: AppointmentStatus.SCHEDULED,
-          notes: dto.notes,
-        },
-      })
-      .then(this.toResult);
+      return tx.appointment
+        .create({
+          data: {
+            patientId: dto.patientId,
+            doctorId: dto.doctorId,
+            specialtyId: dto.specialtyId,
+            scheduledAt: scheduledDate,
+            durationMinutes: duration,
+            status: AppointmentStatus.SCHEDULED,
+            notes: dto.notes,
+          },
+        })
+        .then(this.toResult);
+    });
   }
 
-  async findAll(filters?: { patientId?: string; doctorId?: string; status?: AppointmentStatus }, actor?: AuthUser): Promise<Appointment[]> {
+  async findAll(
+    filters?: { patientId?: string; doctorId?: string; status?: AppointmentStatus },
+    actor?: AuthUser,
+    skip = 0,
+    take = 500,
+  ): Promise<Appointment[]> {
     const where: { patientId?: string; doctorId?: string; status?: AppointmentStatus } = {
       patientId: filters?.patientId || undefined,
       doctorId: filters?.doctorId || undefined,
@@ -90,10 +102,11 @@ export class AppointmentsService {
         where.doctorId = profile.id;
       }
     }
-    // TODO: add pagination (take/skip) to prevent unbounded result sets
     const appointments = await this.prisma.appointment.findMany({
       where,
       orderBy: { scheduledAt: 'asc' },
+      skip,
+      take,
     });
     return appointments.map(this.toResult);
   }
@@ -125,14 +138,15 @@ export class AppointmentsService {
 
     let scheduledAt: Date | undefined;
     if (dto.scheduledAt) {
-      scheduledAt = new Date(dto.scheduledAt);
+      scheduledAt = parseScheduledAt(dto.scheduledAt);
       if (Number.isNaN(scheduledAt.getTime()) || scheduledAt <= new Date()) {
         throw new BadRequestException('Appointment must be scheduled for a future date');
       }
-      if (await this.findOverlap({ doctorId: apt.doctorId }, scheduledAt, apt.durationMinutes, id)) {
+      await this.assertDoctorHasAvailability(apt.doctorId, scheduledAt, apt.durationMinutes);
+      if (await this.findOverlap(this.prisma.appointment, { doctorId: apt.doctorId }, scheduledAt, apt.durationMinutes, id)) {
         throw new ConflictException('Doctor already has an appointment at this time');
       }
-      if (await this.findOverlap({ patientId: apt.patientId }, scheduledAt, apt.durationMinutes, id)) {
+      if (await this.findOverlap(this.prisma.appointment, { patientId: apt.patientId }, scheduledAt, apt.durationMinutes, id)) {
         throw new ConflictException('Patient already has an appointment at this time');
       }
     }
@@ -147,9 +161,15 @@ export class AppointmentsService {
     return this.toResult(updated);
   }
 
-  async cancel(id: string, actor?: AuthUser): Promise<Appointment> {
-    // TODO: enforce cancel only before scheduledAt — allow admin override with reason
+  async cancel(id: string, actor?: AuthUser, reason?: string): Promise<Appointment> {
     const apt = await this.getAppointment(id);
+    const isAdmin = actor?.role === Role.ADMIN;
+    if (apt.scheduledAt <= new Date() && !isAdmin) {
+      throw new BadRequestException('Appointment can only be cancelled before its scheduled time; ask an admin to override');
+    }
+    if (isAdmin && !reason && apt.scheduledAt <= new Date()) {
+      throw new BadRequestException('Admin override requires a cancellation reason');
+    }
     const isStaff = actor?.role === Role.ADMIN || actor?.role === Role.EMPLOYEE;
     const isOwner = actor?.id === apt.patientId;
     const isDoctorOwner = actor?.role === Role.DOCTOR && (await this.isDoctorOwner(apt, actor));
@@ -167,6 +187,29 @@ export class AppointmentsService {
     const record = await this.prisma.medicalRecord.findUnique({ where: { appointmentId: id }, select: { id: true } });
     if (record) throw new BadRequestException('Cannot delete an appointment with a linked medical record');
     await this.prisma.appointment.delete({ where: { id } });
+  }
+
+  private async assertDoctorHasAvailability(doctorId: string, scheduledAt: Date, durationMinutes: number) {
+    const slots = await this.prisma.availabilitySlot.findMany({
+      where: { doctorId },
+      orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
+    });
+    const local = new Date(scheduledAt.getTime());
+    const dayOfWeek = local.getDay();
+    const startStr = this.hhmm(local);
+    const endDate = new Date(local.getTime() + durationMinutes * 60_000);
+    const endStr = this.hhmm(endDate);
+    const covering = slots.find(
+      (slot) => slot.dayOfWeek === dayOfWeek && slot.startTime <= startStr && slot.endTime >= endStr,
+    );
+    if (!covering) {
+      throw new ConflictException('Doctor has no availability slot covering the requested time');
+    }
+    return covering;
+  }
+
+  private hhmm(date: Date): string {
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
   }
 
   private async getAppointment(id: string): Promise<NonNullable<Awaited<ReturnType<PrismaService['appointment']['findUnique']>>>> {
@@ -213,12 +256,13 @@ export class AppointmentsService {
   }
 
   private async findOverlap(
+    client: Pick<PrismaService, 'appointment'>['appointment'],
     where: { doctorId?: string; patientId?: string },
     scheduledAt: Date,
     durationMinutes: number,
     excludeId?: string,
   ): Promise<boolean> {
-    const rows = await this.prisma.appointment.findMany({
+    const rows = await client.findMany({
       where: {
         ...where,
         status: { in: BLOCKING_STATUSES },
@@ -260,6 +304,7 @@ export class AppointmentsService {
       updatedAt: apt.updatedAt.toISOString(),
     };
   }
-}
+
+  }
 
 export { CreateAppointmentDto, UpdateAppointmentDto } from './dto/appointment.dto';

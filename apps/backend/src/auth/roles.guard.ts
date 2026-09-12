@@ -1,4 +1,4 @@
-import { Injectable, CanActivate, ExecutionContext, SetMetadata } from '@nestjs/common';
+import { ForbiddenException, Injectable, CanActivate, ExecutionContext, SetMetadata } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
 
@@ -15,8 +15,13 @@ export class RolesGuard implements CanActivate {
       context.getClass(),
     ]);
     if (!requiredRoles) return true;
-    // TODO: throw explicit ForbiddenException when user is missing (unauthenticated) instead of silently denying
     const { user } = context.switchToHttp().getRequest();
-    return requiredRoles.some((role) => user?.role === role);
+    if (!user) {
+      throw new ForbiddenException('Authentication required');
+    }
+    if (!requiredRoles.some((role) => user.role === role)) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+    return true;
   }
 }

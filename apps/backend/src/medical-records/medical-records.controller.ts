@@ -45,8 +45,8 @@ export class MedicalRecordsController {
 
   @Delete(':id')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Delete medical record (Admin only)' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.medicalRecordsService.remove(id);
+  @ApiOperation({ summary: 'Void medical record (Admin only)' })
+  remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthUser }) {
+    return this.medicalRecordsService.remove(id, req.user);
   }
 }

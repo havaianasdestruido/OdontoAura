@@ -1,5 +1,7 @@
 import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Prisma } from '@prisma/client';
+import { createHmac, randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +14,13 @@ export interface JwtPayload {
   email: string;
   name: string;
   role: Role;
+  sid?: string;
+}
+
+function pepperize(password: string): string {
+  const pepper = process.env.PASSWORD_PEPPER;
+  if (!pepper) return password;
+  return createHmac('sha256', pepper).update(password).digest('hex');
 }
 
 @Injectable()
@@ -22,45 +31,64 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    // TODO: hash password with pepper (env-based HMAC or argon2) in addition to bcrypt salt
-    // TODO: race condition — findUnique + create is not atomic; catch P2002 unique violation instead
-    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const email = dto.email.toLowerCase();
+    const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) throw new ConflictException('Email already registered');
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        password: passwordHash,
-        name: dto.name,
-        phone: dto.phone,
-        role: Role.PATIENT,
-      },
-    });
+    const passwordHash = await bcrypt.hash(pepperize(dto.password), 10);
+    let user;
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          password: passwordHash,
+          name: dto.name,
+          phone: dto.phone,
+          role: Role.PATIENT,
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('Email already registered');
+      }
+      throw e;
+    }
 
     const token = this.generateToken({ sub: user.id, email: user.email, name: user.name, role: user.role });
     return { user: { id: user.id, email: user.email, name: user.name, role: user.role }, access_token: token };
   }
 
   async login(dto: LoginDto) {
-    // TODO: add rate limiting on login to mitigate brute-force attacks
-    // TODO: normalize email to lowercase before lookup to avoid case-sensitive mismatches
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } });
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const valid = await bcrypt.compare(dto.password, user.password);
+    const valid = await this.verifyPassword(dto.password, user.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     const token = this.generateToken({ sub: user.id, email: user.email, name: user.name, role: user.role });
     return { user: { id: user.id, email: user.email, name: user.name, role: user.role }, access_token: token };
   }
 
+  private async verifyPassword(password: string, storedHash: string): Promise<boolean> {
+    if (await bcrypt.compare(pepperize(password), storedHash)) return true;
+    if (pepperize(password) !== password) {
+      return bcrypt.compare(password, storedHash);
+    }
+    return false;
+  }
+
   validateUser(payload: JwtPayload): AuthUser {
-    return { id: payload.sub, email: payload.email, name: payload.name ?? '', role: payload.role };
+    return {
+      id: payload.sub,
+      email: payload.email,
+      name: payload.name ?? '',
+      role: payload.role,
+      ...(payload.sid ? { sessionId: payload.sid } : {}),
+    };
   }
 
   private generateToken(payload: JwtPayload): string {
-    return this.jwtService.sign(payload);
+    return this.jwtService.sign({ ...payload, sid: payload.sid ?? randomUUID() });
   }
 }
 

@@ -3,14 +3,17 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'employee@example.com' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.toLowerCase() : value))
   @IsEmail()
   email!: string;
 
@@ -22,8 +25,7 @@ export class CreateUserDto {
   @ApiPropertyOptional({ example: '+5511999990000' })
   @IsOptional()
   @IsString()
-  @MaxLength(30)
-  // TODO: add @Matches(/^\+?[1-9]\d{1,14}$/) to enforce E.164 phone format
+  @Matches(/^\+?[1-9]\d{1,14}$/, { message: 'phone must be in E.164 format like +5511999990000' })
   phone?: string;
 
   @ApiProperty({ enum: Role })
@@ -35,7 +37,9 @@ export class CreateUserDto {
   @IsString()
   @MinLength(6)
   @MaxLength(72)
-  // TODO: add password complexity regex (uppercase, digit, special char) via @Matches
+  @Matches(/^(?=.*[A-Z])(?=.*\d)/, {
+    message: 'password must contain at least one uppercase letter and one digit',
+  })
   password?: string;
 }
 
@@ -46,9 +50,20 @@ export class UpdateUserDto {
   @MaxLength(120)
   name?: string;
 
+  @ApiPropertyOptional({ example: 'novo@example.com' })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.toLowerCase() : value))
+  @IsEmail()
+  email?: string;
+
   @ApiPropertyOptional({ example: '+5511988887777' })
   @IsOptional()
   @IsString()
-  @MaxLength(30)
+  @Matches(/^\+?[1-9]\d{1,14}$/, { message: 'phone must be in E.164 format like +5511988887777' })
   phone?: string;
+
+  @ApiPropertyOptional({ enum: Role })
+  @IsOptional()
+  @IsEnum(Role)
+  role?: Role;
 }

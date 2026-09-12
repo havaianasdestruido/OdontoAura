@@ -1,6 +1,5 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, ParseUUIDPipe } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-// TODO: add @ApiResponse decorators for error codes (404, 403, 409) — swagger docs incomplete
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request, ParseUUIDPipe, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { DoctorsService, CreateDoctorDto, UpdateDoctorDto, CreateAvailabilityDto } from './doctors.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
@@ -16,16 +15,26 @@ export class DoctorsController {
 
   @Post()
   @Roles(Role.ADMIN)
+  @ApiResponse({ status: 201, description: 'Doctor profile created' })
+  @ApiResponse({ status: 400, description: 'User is not a DOCTOR' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'User or specialty not found' })
+  @ApiResponse({ status: 409, description: 'License already in use or profile exists' })
   @ApiOperation({ summary: 'Register a new doctor profile (Admin)' })
   create(@Body() dto: CreateDoctorDto) {
     return this.doctorsService.create(dto);
   }
 
-  // TODO: findAll returns full profiles incl. licenseNumber to any auth'd user — limit fields per role
   @Get()
+  @ApiQuery({ name: 'skip', required: false, type: Number })
+  @ApiQuery({ name: 'take', required: false, type: Number })
   @ApiOperation({ summary: 'List all doctors' })
-  findAll() {
-    return this.doctorsService.findAll();
+  findAll(
+    @Query('skip', new DefaultValuePipe(0), ParseIntPipe) skip = 0,
+    @Query('take', new DefaultValuePipe(500), ParseIntPipe) take = 500,
+    @Request() req: { user: AuthUser },
+  ) {
+    return this.doctorsService.findAll(req.user, skip, take);
   }
 
   @Get('by-user/:userId')
@@ -36,8 +45,8 @@ export class DoctorsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get doctor by ID' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.doctorsService.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthUser }) {
+    return this.doctorsService.findOne(id, req.user);
   }
 
   @Put(':id')
@@ -54,7 +63,6 @@ export class DoctorsController {
     return this.doctorsService.remove(id);
   }
 
-  // TODO: no PUT/DELETE endpoints for availability — cannot update or remove individual slots
   @Post(':id/availability')
   @Roles(Role.ADMIN, Role.DOCTOR)
   @ApiOperation({ summary: 'Add availability slot for a doctor' })
@@ -64,6 +72,29 @@ export class DoctorsController {
     @Request() req: { user: AuthUser },
   ) {
     return this.doctorsService.addAvailability(id, dto, req.user);
+  }
+
+  @Put(':id/availability/:slotId')
+  @Roles(Role.ADMIN, Role.DOCTOR)
+  @ApiOperation({ summary: 'Update an availability slot' })
+  updateAvailability(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('slotId', ParseUUIDPipe) slotId: string,
+    @Body() dto: CreateAvailabilityDto,
+    @Request() req: { user: AuthUser },
+  ) {
+    return this.doctorsService.updateAvailability(id, slotId, dto, req.user);
+  }
+
+  @Delete(':id/availability/:slotId')
+  @Roles(Role.ADMIN, Role.DOCTOR)
+  @ApiOperation({ summary: 'Remove an availability slot' })
+  removeAvailability(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('slotId', ParseUUIDPipe) slotId: string,
+    @Request() req: { user: AuthUser },
+  ) {
+    return this.doctorsService.removeAvailability(id, slotId, req.user);
   }
 
   @Get(':id/availability')

@@ -5,25 +5,34 @@ import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { RolesGuard } from './roles.guard';
+import { LoginRateLimiter } from './login-rate-limiter';
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        // TODO: throw on missing JWT_SECRET in production instead of using 'dev-secret' fallback
-        secret: config.get<string>('JWT_SECRET', 'dev-secret'),
-        signOptions: {
-          expiresIn: config.get<string>('JWT_EXPIRATION', '1h') as NonNullable<JwtModuleOptions['signOptions']>['expiresIn'],
-          // TODO: add issuer and audience to signOptions to match jwt.strategy.ts validation
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const nodeEnv = config.get<string>('NODE_ENV', 'development');
+        const secret = config.get<string>('JWT_SECRET');
+        if (nodeEnv === 'production' && !secret) {
+          throw new Error('JWT_SECRET must be set when NODE_ENV=production');
+        }
+        return {
+          secret: secret ?? 'dev-secret',
+          signOptions: {
+            expiresIn: config.get<string>('JWT_EXPIRATION', '1h') as NonNullable<JwtModuleOptions['signOptions']>['expiresIn'],
+            issuer: config.get<string>('JWT_ISSUER', 'odontoaura-api'),
+            audience: config.get<string>('JWT_AUDIENCE', 'odontoaura-client'),
+          },
+        };
+      },
     }),
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard, LoginRateLimiter],
   controllers: [AuthController],
-  exports: [AuthService, JwtModule, PassportModule],
-  // TODO: export RolesGuard so feature modules can import it without duplicating registration
+  exports: [AuthService, JwtModule, PassportModule, JwtAuthGuard, RolesGuard, LoginRateLimiter],
 })
 export class AuthModule {}

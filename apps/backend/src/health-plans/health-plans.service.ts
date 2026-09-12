@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Role } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateHealthPlanDto, UpdateHealthPlanDto, AssignPlanDto } from './dto/health-plan.dto';
 import { AuthUser } from '../common/auth-user';
@@ -26,29 +27,38 @@ export interface PatientPlan {
 export class HealthPlansService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // TODO: create() uniqueness check (findFirst) races with concurrent creates — catch Prisma P2002 or use a transaction with advisory lock
   async create(dto: CreateHealthPlanDto): Promise<HealthPlan> {
+    const name = dto.name.trim();
+    const provider = dto.provider.trim();
     const existing = await this.prisma.healthPlan.findFirst({
-      where: { name: dto.name, provider: dto.provider },
+      where: { name, provider },
       select: { id: true },
     });
     if (existing) throw new ConflictException('Health plan with this name and provider already exists');
 
-    return this.prisma.healthPlan.create({
-      data: {
-        name: dto.name,
-        provider: dto.provider,
-        coveragePercentage: dto.coveragePercentage,
-        isActive: dto.isActive ?? true,
-      },
-    }).then(this.toPlanResult);
+    try {
+      return await this.prisma.healthPlan.create({
+        data: {
+          name,
+          provider,
+          coveragePercentage: dto.coveragePercentage,
+          isActive: dto.isActive ?? true,
+        },
+      }).then(this.toPlanResult);
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('Health plan with this name and provider already exists');
+      }
+      throw e;
+    }
   }
 
-  async findAll(activeOnly = false): Promise<HealthPlan[]> {
-    // TODO: add pagination (take/skip) to prevent unbounded result sets
+  async findAll(activeOnly = false, skip = 0, take = 500): Promise<HealthPlan[]> {
     const plans = await this.prisma.healthPlan.findMany({
       where: activeOnly ? { isActive: true } : undefined,
       orderBy: { name: 'asc' },
+      skip,
+      take,
     });
     return plans.map(this.toPlanResult);
   }
@@ -59,23 +69,56 @@ export class HealthPlansService {
     return this.toPlanResult(plan);
   }
 
-  // TODO: update() does not re-validate (name, provider) uniqueness — changing name alone could collide with existing plan
   async update(id: string, dto: UpdateHealthPlanDto): Promise<HealthPlan> {
     await this.findOne(id);
     if (Object.keys(dto).length === 0) throw new BadRequestException('No fields to update');
-    const plan = await this.prisma.healthPlan.update({ where: { id }, data: dto });
+    const name = dto.name !== undefined ? dto.name.trim() : undefined;
+    const provider = dto.provider !== undefined ? dto.provider.trim() : undefined;
+    if (name || provider) {
+      const collision = await this.prisma.healthPlan.findFirst({
+        where: {
+          id: { not: id },
+          ...(name ? { name } : {}),
+          ...(provider ? { provider } : {}),
+        },
+        select: { id: true },
+      });
+      if (collision) throw new ConflictException('Health plan with this name and provider already exists');
+    }
+    const plan = await this.prisma.healthPlan.update({
+      where: { id },
+      data: {
+        ...(name !== undefined ? { name } : {}),
+        ...(provider !== undefined ? { provider } : {}),
+        ...(dto.coveragePercentage !== undefined ? { coveragePercentage: dto.coveragePercentage } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+      },
+    });
     return this.toPlanResult(plan);
   }
 
-  // TODO: remove() will throw raw FK constraint error if plan has patientHealthPlan references — handle gracefully or soft-delete
   async remove(id: string): Promise<void> {
     const plan = await this.prisma.healthPlan.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException(`Health plan ${id} not found`);
-    await this.prisma.healthPlan.delete({ where: { id } });
+    try {
+      await this.prisma.healthPlan.delete({ where: { id } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+        throw new ConflictException('Health plan is assigned to patients and cannot be deleted; deactivate it instead');
+      }
+      throw e;
+    }
   }
 
   async assignToPatient(dto: AssignPlanDto): Promise<PatientPlan> {
     const plan = await this.findOne(dto.healthPlanId);
+    if (!plan.isActive) throw new BadRequestException('Cannot assign an inactive health plan');
+
+    const expiry = new Date(dto.expiryDate);
+    if (Number.isNaN(expiry.getTime()) || expiry <= new Date()) {
+      throw new BadRequestException('expiryDate must be in the future');
+    }
+
     const patient = await this.prisma.user.findUnique({ where: { id: dto.patientId }, select: { id: true } });
     if (!patient) throw new NotFoundException(`Patient ${dto.patientId} not found`);
 
@@ -90,7 +133,7 @@ export class HealthPlansService {
         patientId: dto.patientId,
         healthPlanId: dto.healthPlanId,
         cardNumber: dto.cardNumber,
-        expiryDate: new Date(dto.expiryDate),
+        expiryDate: expiry,
       },
     });
 
@@ -100,7 +143,7 @@ export class HealthPlansService {
       healthPlanId: patientPlan.healthPlanId,
       cardNumber: patientPlan.cardNumber,
       expiryDate: patientPlan.expiryDate.toISOString(),
-      healthPlan: { ...plan, createdAt: plan.createdAt },
+      healthPlan: plan,
     };
   }
 
@@ -137,9 +180,12 @@ export class HealthPlansService {
     return { covered: true, coveragePercentage: plan.coveragePercentage };
   }
 
-  async removePatientPlan(id: string): Promise<void> {
-    const row = await this.prisma.patientHealthPlan.findUnique({ where: { id } });
+  async removePatientPlan(id: string, actor: AuthUser): Promise<void> {
+    const row = await this.prisma.patientHealthPlan.findUnique({ where: { id }, select: { id: true, patientId: true } });
     if (!row) throw new NotFoundException(`Patient plan ${id} not found`);
+    if (actor.role === Role.PATIENT && row.patientId !== actor.id) {
+      throw new ForbiddenException('You can only remove your own health plan');
+    }
     await this.prisma.patientHealthPlan.delete({ where: { id } });
   }
 

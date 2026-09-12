@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,35 +14,55 @@ export interface User {
   createdAt: string;
 }
 
+export function normalizePhone(value?: string): string | undefined {
+  if (!value) return undefined;
+  const stripped = value
+    .trim()
+    .replace(/[\s().-]/g, '');
+  if (!stripped) return undefined;
+  return stripped.startsWith('+') ? stripped : `+${stripped}`;
+}
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateUserDto): Promise<User> {
-    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const email = dto.email.toLowerCase();
+    const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) throw new ConflictException('Email already registered');
 
-    // TODO: normalize phone (trim, strip spaces, ensure +country prefix) before persisting
     const password = dto.password ?? (await bcrypt.hash(Math.random().toString(36).slice(2), 10));
-    return this.prisma.user
-      .create({
-        data: {
-          email: dto.email,
-          name: dto.name,
-          phone: dto.phone,
-          role: dto.role,
-          password,
-        },
-      })
-      .then(this.toResult);
+    try {
+      return this.prisma.user
+        .create({
+          data: {
+            email,
+            name: dto.name,
+            phone: normalizePhone(dto.phone),
+            role: dto.role,
+            password,
+          },
+        })
+        .then(this.toResult);
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('Email already registered');
+      }
+      throw e;
+    }
   }
 
-  async findAll(role?: Role): Promise<User[]> {
-    // TODO: add pagination (take/skip) to prevent unbounded result sets
-    // TODO: select fields per role to avoid leaking PII (phone, email) to non-admin callers
+  async findAll(role?: Role, actor?: { role: Role }, skip = 0, take = 500): Promise<User[]> {
     const users = await this.prisma.user.findMany({
       where: role ? { role } : undefined,
       orderBy: { createdAt: 'asc' },
+      skip,
+      take,
+      select:
+        actor?.role === Role.ADMIN
+          ? undefined
+          : { id: true, name: true, email: true, role: true, createdAt: true },
     });
     return users.map(this.toResult);
   }
@@ -53,23 +74,42 @@ export class UsersService {
   }
 
   async update(id: string, dto: UpdateUserDto): Promise<User> {
-    // TODO: eliminate redundant findUnique — use upsert or catch P2025 not-found from update directly
-    const existing = await this.prisma.user.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException(`User ${id} not found`);
     if (Object.keys(dto).length === 0) throw new BadRequestException('No fields to update');
-    const user = await this.prisma.user.update({ where: { id }, data: dto });
-    return this.toResult(user);
+    const data = {
+      ...(dto.name !== undefined ? { name: dto.name } : {}),
+      ...(dto.email !== undefined ? { email: dto.email.toLowerCase() } : {}),
+      ...(dto.phone !== undefined ? { phone: normalizePhone(dto.phone) } : {}),
+      ...(dto.role !== undefined ? { role: dto.role } : {}),
+    };
+    try {
+      const user = await this.prisma.user.update({ where: { id }, data });
+      return this.toResult(user);
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+        throw new NotFoundException(`User ${id} not found`);
+      }
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('Email already registered');
+      }
+      throw e;
+    }
   }
 
   async remove(id: string): Promise<void> {
-    // TODO: eliminate redundant findUnique — handle P2025 not-found from delete directly
-    const user = await this.prisma.user.findUnique({ where: { id } });
-    if (!user) throw new NotFoundException(`User ${id} not found`);
-    // TODO: soft-delete or cascade-check to avoid FK errors on users with appointments/records
-    await this.prisma.user.delete({ where: { id } });
+    try {
+      await this.prisma.user.delete({ where: { id } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+        throw new NotFoundException(`User ${id} not found`);
+      }
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+        throw new ConflictException('User has related appointments, records or plans and cannot be deleted');
+      }
+      throw e;
+    }
   }
 
-  private toResult(user: { id: string; email: string; name: string; phone: string | null; role: Role; createdAt: Date }): User {
+  private toResult(user: { id: string; email: string; name: string; phone?: string | null; role: Role; createdAt: Date }): User {
     return {
       id: user.id,
       email: user.email,

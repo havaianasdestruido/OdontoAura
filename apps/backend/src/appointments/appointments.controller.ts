@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request, ParseEnumPipe, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request, ParseEnumPipe, ParseUUIDPipe, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { AppointmentsService, CreateAppointmentDto, UpdateAppointmentDto, AppointmentStatus } from './appointments.service';
@@ -25,14 +25,17 @@ export class AppointmentsController {
   @ApiQuery({ name: 'patientId', required: false })
   @ApiQuery({ name: 'doctorId', required: false })
   @ApiQuery({ name: 'status', required: false, enum: AppointmentStatus })
-  // TODO: add pagination query params (take/skip) and wire into service findAll
+  @ApiQuery({ name: 'skip', required: false, type: Number })
+  @ApiQuery({ name: 'take', required: false, type: Number })
   findAll(
     @Request() req: { user: AuthUser },
     @Query('patientId') patientId?: string,
     @Query('doctorId') doctorId?: string,
     @Query('status', new ParseEnumPipe(AppointmentStatus, { optional: true })) status?: AppointmentStatus,
+    @Query('skip', new DefaultValuePipe(0), ParseIntPipe) skip = 0,
+    @Query('take', new DefaultValuePipe(500), ParseIntPipe) take = 500,
   ) {
-    return this.appointmentsService.findAll({ patientId, doctorId, status }, req.user);
+    return this.appointmentsService.findAll({ patientId, doctorId, status }, req.user, skip, take);
   }
 
   @Get(':id')
@@ -49,16 +52,15 @@ export class AppointmentsController {
 
   @Put(':id/cancel')
   @ApiOperation({ summary: 'Cancel an appointment (owner or staff)' })
-  cancel(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthUser }) {
-    return this.appointmentsService.cancel(id, req.user);
+  cancel(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthUser }, @Query('reason') reason?: string) {
+    return this.appointmentsService.cancel(id, req.user, reason);
   }
 
   @Put(':id/confirm')
   @Roles(Role.EMPLOYEE, Role.ADMIN)
   @ApiOperation({ summary: 'Confirm an appointment (Reception/Admin)' })
-  // TODO: pass req.user actor — current code bypasses assertCanManage entirely
-  confirm(@Param('id', ParseUUIDPipe) id: string) {
-    return this.appointmentsService.updateStatus(id, AppointmentStatus.CONFIRMED);
+  confirm(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthUser }) {
+    return this.appointmentsService.updateStatus(id, AppointmentStatus.CONFIRMED, req.user);
   }
 
   @Put(':id/no-show')

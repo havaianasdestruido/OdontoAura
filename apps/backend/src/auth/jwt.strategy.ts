@@ -4,6 +4,17 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService, JwtPayload } from './auth.service';
 
+function cookieExtractor(req: { headers: { cookie?: string } }): string | null {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return null;
+  const token = cookieHeader
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith('token='));
+  if (!token) return null;
+  return decodeURIComponent(token.slice('token='.length));
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
@@ -11,11 +22,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly authService: AuthService,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([ExtractJwt.fromAuthHeaderAsBearerToken(), cookieExtractor]),
       ignoreExpiration: false,
-      // TODO: add algorithms: ['HS256'] to restrict accepted JWT algorithms and prevent algorithm confusion attacks
-      // TODO: throw on missing JWT_SECRET in production instead of using 'dev-secret' fallback
-      secretOrKey: configService.get<string>('JWT_SECRET', 'dev-secret'),
+      secretOrKey: configService.get<string>('JWT_SECRET') ?? 'dev-secret',
+      algorithms: ['HS256'],
+      issuer: configService.get<string>('JWT_ISSUER', 'odontoaura-api'),
+      audience: configService.get<string>('JWT_AUDIENCE', 'odontoaura-client'),
     });
   }
 
