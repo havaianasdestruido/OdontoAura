@@ -3,6 +3,7 @@ packages:
   - "packages/*"
 overrides:
   postcss: "^8.5.23"
+  picomatch: "^4.0.7"
 allowBuilds:
   "@parcel/watcher": true
   "@prisma/client": true
