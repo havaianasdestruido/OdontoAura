@@ -1,0 +1,244 @@
+# Labeler configuration for OdontoAura
+# Labels are automatically added to PRs based on changed files
+
+# Frontend Application
+frontend:
+  - changed-files:
+      - any-glob-to-any-file: 'apps/frontend/**'
+
+# Backend Application
+backend:
+  - changed-files:
+      - any-glob-to-any-file: 'apps/backend/**'
+
+# Shared Packages
+shared:
+  - changed-files:
+      - any-glob-to-any-file: 'packages/shared/**'
+
+# Documentation
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - 'README.md'
+          - '**.md'
+
+# Configuration Files
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'tsconfig*.json'
+          - 'pnpm-workspace.yaml'
+          - 'pnpm-lock.yaml'
+          - '.npmrc'
+          - '.env.example'
+          - '.vercelignore'
+
+# GitHub Configuration
+github:
+  - changed-files:
+      - any-glob-to-any-file: '.github/**'
+
+# Build & Deploy
+build:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'start_all.ps1'
+          - '.gitignore'
+
+# TypeScript/JavaScript Changes
+typescript:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.ts'
+          - '**/*.tsx'
+
+# Type Definitions
+types:
+  - changed-files:
+      - any-glob-to-any-file: '**/*.d.ts'
+
+# Package Management
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'package.json'
+          - 'pnpm-lock.yaml'
+
+# Patient Management Features
+patient-management:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/patient/**'
+          - '**/patients/**'
+          - '**/paciente/**'
+          - '**/pacientes/**'
+
+# Scheduling Features
+scheduling:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/schedule/**'
+          - '**/scheduling/**'
+          - '**/agendamento/**'
+          - '**/appointment/**'
+
+# Appointments/Consultations
+appointments:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/appointment/**'
+          - '**/appointments/**'
+          - '**/consulta/**'
+          - '**/consultas/**'
+
+# Medical Specialties
+specialties:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/specialty/**'
+          - '**/specialties/**'
+          - '**/especialidade/**'
+          - '**/especialidades/**'
+
+# API/REST Endpoints
+api:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/api/**'
+          - '**/routes/**'
+          - '**/controllers/**'
+
+# Database/Models
+database:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/models/**'
+          - '**/db/**'
+          - '**/database/**'
+          - '**/schema/**'
+
+# Components/UI
+ui-components:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/components/**'
+          - '**/ui/**'
+
+# Styles
+styling:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.css'
+          - '**/*.scss'
+          - '**/*.tailwind.ts'
+          - '**/styles/**'
+          - '**/theme/**'
+
+# Testing
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.test.ts'
+          - '**/*.test.tsx'
+          - '**/*.spec.ts'
+          - '**/*.spec.tsx'
+          - '**/tests/**'
+          - '**/test/**'
+
+# Performance
+performance:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/performance/**'
+          - '**/optimization/**'
+
+# Security
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/auth/**'
+          - '**/security/**'
+          - '**/middleware/**'
+
+# Utilities/Helpers
+utilities:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/utils/**'
+          - '**/helpers/**'
+          - '**/lib/**'
+
+# Bug Fix Label (for files commonly associated with bug fixes)
+bug:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/fix/**'
+          - '**/bugfix/**'
+
+# Enhancement Label
+enhancement:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/feature/**'
+          - '**/features/**'
+
+# Size Labels
+size/XS:
+  - changed-files:
+      - any-glob-to-any-file: '**'
+      - all-globs-to-any-file:
+          - 'apps/frontend/**'
+          - 'apps/backend/**'
+          - 'packages/shared/**'
+        conditions:
+          count:
+            less-than: 5
+
+size/S:
+  - changed-files:
+      - any-glob-to-any-file: '**'
+      - all-globs-to-any-file:
+          - 'apps/frontend/**'
+          - 'apps/backend/**'
+          - 'packages/shared/**'
+        conditions:
+          count:
+            from: 5
+            to: 20
+
+size/M:
+  - changed-files:
+      - any-glob-to-any-file: '**'
+      - all-globs-to-any-file:
+          - 'apps/frontend/**'
+          - 'apps/backend/**'
+          - 'packages/shared/**'
+        conditions:
+          count:
+            from: 21
+            to: 50
+
+size/L:
+  - changed-files:
+      - any-glob-to-any-file: '**'
+      - all-globs-to-any-file:
+          - 'apps/frontend/**'
+          - 'apps/backend/**'
+          - 'packages/shared/**'
+        conditions:
+          count:
+            from: 51
+            to: 100
+
+size/XL:
+  - changed-files:
+      - any-glob-to-any-file: '**'
+      - all-globs-to-any-file:
+          - 'apps/frontend/**'
+          - 'apps/backend/**'
+          - 'packages/shared/**'
+        conditions:
+          count:
+            greater-than: 100
