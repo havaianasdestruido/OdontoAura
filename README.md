@@ -4,6 +4,16 @@ Sistema de gerenciamento, agendamento e manutenção de pacientes, horários, co
 
 O **OdontoAura** é construído utilizando tecnologias modernas e robustas para garantir alta disponibilidade, performance, segurança e boa experiência de usuário.
 
+## Screenshots
+
+<img width="1867" height="910" alt="image" src="https://github.com/user-attachments/assets/411fb52a-2db8-4870-b894-447c6af62f73" />
+
+<img width="1901" height="934" alt="image" src="https://github.com/user-attachments/assets/6acf1bcc-c7ea-4680-9cac-cfb3e5927f1f" />
+
+<img width="1919" height="930" alt="image" src="https://github.com/user-attachments/assets/5429ce49-9867-42e4-8717-c61e02215ef6" />
+
+<img width="1919" height="927" alt="image" src="https://github.com/user-attachments/assets/8a40bd2e-5ece-4a2c-bd27-de6abfa6f6e1" />
+
 ## Stack Tecnológica
 
 | Camada | Tecnologias |
