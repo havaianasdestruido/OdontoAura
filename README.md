@@ -86,6 +86,7 @@ pnpm --filter @odontoaura/frontend dev
 | Service | URL |
 | :--- | :--- |
 | Frontend | https://frontend-five-blush-84.vercel.app |
+| Frontend (GitHub Pages) | Deployed via GitHub Actions (`.github/workflows/deploy-frontend.yml`) |
 | Backend API | https://backend-eta-pink.vercel.app/api |
 | Health Check | https://backend-eta-pink.vercel.app/api/health |
 | Swagger Docs | https://backend-eta-pink.vercel.app/api/docs |
