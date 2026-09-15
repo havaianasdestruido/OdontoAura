@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { api, apiErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -16,6 +17,7 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
+  const router = useRouter();
   const { setAuth } = useAuthStore();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,7 +33,7 @@ export default function LoginPage() {
       const response = await api.post('/auth/login', data);
       const { user, access_token } = response.data;
       setAuth(user, access_token);
-      window.location.href = '/dashboard';
+      router.push('/dashboard');
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {

@@ -18,14 +18,17 @@ jest.mock('@/lib/api', () => ({
   apiErrorMessage: jest.fn((err) => err?.response?.data?.message || 'Erro ao realizar login'),
 }));
 
+const mockPush = jest.fn();
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: mockPush,
+  }),
+}));
+
 describe('LoginPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     useAuthStore.setState({ user: null, token: null, status: 'unauthenticated' });
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: { href: '' },
-    });
   });
 
   it('renders login form elements', () => {
@@ -58,7 +61,7 @@ describe('LoginPage', () => {
       });
       expect(useAuthStore.getState().user).toEqual(mockUser);
       expect(useAuthStore.getState().token).toBe('mock_token');
-      expect(window.location.href).toBe('/dashboard');
+      expect(mockPush).toHaveBeenCalledWith('/dashboard');
     });
   });
 });
