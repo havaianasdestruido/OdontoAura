@@ -7,7 +7,7 @@
     "postinstall": "pnpm --filter @odontoaura/shared run build",
     "dev": "pnpm --parallel -r run dev",
     "build": "pnpm --parallel -r run build",
-    "lint": "pnpm --parallel -r run lint",
+    "lint": "pnpm --filter @odontoaura/backend run lint && pnpm --filter @odontoaura/frontend run lint",
     "test": "pnpm --parallel -r run test",
     "test:e2e": "pnpm --parallel -r run test:e2e"
   },
