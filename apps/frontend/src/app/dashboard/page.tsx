@@ -29,13 +29,21 @@ export default function DashboardPage() {
   // TODO: migrate to useQuery (appointments page is already migrated)
   useEffect(() => {
     if (user?.role === 'DOCTOR') {
-      setLoadingDoctor(true);
+      let active = true;
       api
         .get(`/doctors/by-user/${user.id}`)
-        .then(({ data }) => setDoctor(data))
-        .catch(() => setDoctor(null))
-        // TODO: expose error state and add retry button instead of silently falling back to null
-        .finally(() => setLoadingDoctor(false));
+        .then(({ data }) => {
+          if (active) setDoctor(data);
+        })
+        .catch(() => {
+          if (active) setDoctor(null);
+        })
+        .finally(() => {
+          if (active) setLoadingDoctor(false);
+        });
+      return () => {
+        active = false;
+      };
     }
   }, [user]);
 
