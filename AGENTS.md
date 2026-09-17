@@ -14,11 +14,12 @@ medical records, health plans). Monorepo managed with **pnpm workspaces**.
 ```
 apps/
   backend/     NestJS 12 + Fastify REST API (port 3001, global prefix /api)
-  frontend/    Next.js 15 App Router (port 3000)
+  frontend/    Next.js 16 App Router, static export (port 3000 in dev)
 packages/
   shared/      @odontoaura/shared — Prisma schema + generated client
-.github/       CI workflows, labeler, dependabot, templates
+.github/       CI workflows, labeler, templates
 docs/          Stale/incomplete — do not trust (see §11)
+TODO.md        Roadmap pt-BR (high-contrast theme, rebrand, consistency fixes)
 ```
 
 ## 2. Toolchain (non-negotiable)
@@ -52,7 +53,7 @@ pnpm --filter @odontoaura/frontend exec tsc --noEmit
 pnpm --filter @odontoaura/backend test           # vitest, src/**/*.spec.ts (mocked Prisma — no DB)
 pnpm --filter @odontoaura/frontend test          # jest + RTL, src/__tests__
 pnpm --filter @odontoaura/backend test:cloud     # live e2e vs deployed API (env-gated, see §11)
-pnpm build                                       # parallel build both packages
+pnpm build                                       # parallel build both packages (frontend → apps/frontend/out, static)
 ```
 
 Run `lint` + both `tsc --noEmit` after any change before committing.
@@ -117,8 +118,11 @@ Run `lint` + both `tsc --noEmit` after any change before committing.
 
 ## 5. Frontend architecture (`apps/frontend`)
 
-- Next.js 15 App Router; every interactive page is `'use client'` (no server
-  components yet). UI copy is **Brazilian Portuguese** — keep it that way.
+- Next.js 16.3.5 App Router + React 19; every interactive page is `'use client'`
+  (no server components yet). **Static export**: `next.config.js` has
+  `output: 'export'`, `images.unoptimized`, `transpilePackages: ['@odontoaura/shared']`,
+  `outputFileTracingRoot` pointing at the monorepo root. UI copy is **Brazilian
+  Portuguese** — keep it that way.
 - `src/lib/api.ts`: axios instance, `baseURL = NEXT_PUBLIC_API_URL` (defaults to
   prod backend), 15s timeout, request interceptor injects `localStorage` token,
   401 → clear token + redirect `/auth/login`. `apiErrorMessage()` maps common
@@ -135,7 +139,7 @@ Run `lint` + both `tsc --noEmit` after any change before committing.
 
 ### Frontend tests
 
-- Jest + Testing Library (jsdom), `src/__tests__/{page,appointments-page}.test.tsx`.
+- Jest + Testing Library (jsdom), `src/__tests__/{page,appointments-page,login-page}.test.tsx`.
 - Component tests **mock `@/lib/api` and `@/stores/auth.store`** (see existing files).
 - Alias `@/* → src/*` mapped in jest config and tsconfig.
 
@@ -149,30 +153,40 @@ Run `lint` + both `tsc --noEmit` after any change before committing.
 - Flow after editing schema: `pnpm --filter @odontoaura/shared run build` (generate),
   `pnpm --filter @odontoaura/shared exec prisma migrate dev --name <name>`,
   prod: `... exec prisma migrate deploy`.
+- ⚠️ **Two schema copies exist**: `packages/shared/prisma/schema.prisma` (canonical,
+  has `directUrl = env("DIRECT_URL")`) and `apps/backend/prisma/schema.prisma`
+  (backend's `prisma` config points here; currently identical but **missing
+  `directUrl`**). Keep both in sync when the schema changes.
 - No seed script in the repo; local smoke users in README share password
   `secret123` (local only).
 
 ## 7. Git / CI / PRs
 
 - Conventional Commits: `feat fix docs style refactor test chore ci`.
-  `pr-check.yml` enforces allowed types on PRs. Work off `main`.
+  `pr-check.yml` enforces allowed types on PRs (semantic-PR action). Work off `main`.
 - CI (`ci.yml`): jobs lint / typecheck (both packages `tsc --noEmit`) /
   test backend / test frontend / test-backend-cloud / build. Uses
-  `pnpm install --frozen-lockfile`, pnpm 11.25.0, node 22. Cloud test needs repo
-  secrets `CLOUD_ADMIN_EMAIL`, `CLOUD_ADMIN_PASSWORD`, `CLOUD_TEST_REGISTER`.
-- Auto-merge for dependabot (`deps.yml`), PR labeler (`labeler.yml`),
-  dependabot weekly.
+  `pnpm install --frozen-lockfile`, pnpm 11.25.0, node 22. Cloud job hardcodes
+  prod URLs (`CLOUD_API_URL`, `CLOUD_FRONTEND_ORIGIN`) and needs repo secrets
+  `CLOUD_ADMIN_EMAIL`, `CLOUD_ADMIN_PASSWORD`, `CLOUD_TEST_REGISTER`.
+- **Dependabot + auto-merge removed**: `.github/dependabot.yml` and
+  `workflows/deps.yml` were deleted — no automated dependency updates anymore.
+  Replacement: `dependency-review` (`workflows/dependency-review.yml`) blocks PRs
+  to `main` that introduce known-vulnerable deps.
+- PR labeler: `workflows/label.yml` + `.github/labeler.yml`.
 
-## 8. Deployment (Vercel) — verified quirks
+## 8. Deployment — verified quirks
 
 - **Backend**: project alias `backend-eta-pink.vercel.app`. Deploy from
   `apps/backend` with `vercel --yes` / `vercel --prod`. `vercel.json` routes all
   to `/api/index` (serverless bundle).
-- **Frontend**: project alias `frontend-five-blush-84.vercel.app`. Root Directory
-  setting is `apps/frontend`; **deploy from the repo root with
-  `vercel --archive=tgz`** — deploying from inside `apps/frontend` fails with
-  "Root Directory apps/frontend does not exist".
-- Swagger is off in prod (`NODE_ENV=production`). Both deployments require prod env
+- **Frontend**: now a **static export** (`apps/frontend/out`, `output: 'export'`).
+  Canonical host is **GitHub Pages**: `workflows/deploy-gh-pages.yml` uploads
+  `apps/frontend/out` on every push to `main`, and `next start` does NOT serve
+  static exports (use any static host for `out/`). Legacy Vercel hosting
+  (project alias `frontend-five-blush-84.vercel.app`) still exists and is used as
+  `CLOUD_FRONTEND_ORIGIN` by cloud tests, but is no longer the deploy target.
+- Swagger is off in prod (`NODE_ENV=production`). Backend deploy requires prod env
   vars (§10).
 
 ## 9. Environment variables (names verified in code)
@@ -197,7 +211,9 @@ currently only holds a `VERCEL_OIDC_TOKEN` deployment artifact.
   `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`).
 - `.\start_all.ps1` boots local PostgreSQL + backend (:3001) + frontend (:3000),
   writes PIDs under `.logs`; `.\start_all.ps1 -Stop` stops all; `-Mode prod` needs
-  built `dist`. Local DB lives in gitignored `.pg/`.
+  built backend `dist` + frontend `.next`. ⚠️ Since the frontend is a **static
+  export**, `next start` in `-Mode prod` will fail — serve `apps/frontend/out`
+  with a static server instead. Local DB lives in gitignored `.pg/`.
 
 ## 11. Known gaps & stale docs (do not propagate)
 
@@ -208,6 +224,9 @@ currently only holds a `VERCEL_OIDC_TOKEN` deployment artifact.
   tests live under `test:cloud`.
 - Open Dependabot alert: `ajv@6.15.0` (medium) via eslint 8 — no patched 6.x line;
   overriding to 8.x breaks `next lint`. Leave as-is unless replacing eslint.
+- `TODO.md` (pt-BR) is the roadmap: fix patient-access login flow, high-contrast
+  theme, palette rebranding, consistency/deploy fixes. The login redirect part is
+  already partly addressed upstream (see dashboard/login changes).
 
 ## 12. Security rules
 
