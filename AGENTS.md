@@ -47,7 +47,9 @@ pnpm --filter @odontoaura/frontend dev         # web on :3000
 
 Checks (all pass in CI):
 ```bash
-pnpm lint                                                        # both packages
+pnpm lint                                                        # both packages (ESLint 9 flat config: apps/frontend/eslint.config.mjs, apps/backend/.eslintrc.json)
+pnpm --filter @odontoaura/frontend lint                          # eslint . (flat config)
+pnpm --filter @odontoaura/backend lint                           # eslint src --ext .ts
 pnpm --filter @odontoaura/backend exec tsc --noEmit
 pnpm --filter @odontoaura/frontend exec tsc --noEmit
 pnpm --filter @odontoaura/backend test           # vitest, src/**/*.spec.ts (mocked Prisma — no DB)
