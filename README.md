@@ -15,6 +15,8 @@ Sistema de gerenciamento, agendamento e manutenção de pacientes, horários, co
 
 O **OdontoAura** é construído utilizando tecnologias modernas e robustas para garantir alta disponibilidade, performance, segurança e boa experiência de usuário.
 
+Stack está em [docs/stack/README.md](docs/stack/README.md)
+
 ## Screenshots
 
 <img width="1867" height="910" alt="image" src="https://github.com/user-attachments/assets/411fb52a-2db8-4870-b894-447c6af62f73" />
